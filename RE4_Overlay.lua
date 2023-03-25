@@ -611,13 +611,37 @@ re.on_draw_ui(function()
             changed, Config.CheatConfig.NoHitMode = imgui.checkbox("No Hit Mode", Config.CheatConfig.NoHitMode)
             configChanged = configChanged or changed
 
-            imgui.text("Set PTAS (press enter to apply)")
-			local _, ptasValue = imgui.input_text("Set PTAS", "500000");
+            imgui.text("Set PTAS")
+			local _, ptasValue = imgui.input_text("Set PTAS", "");
             local ptas = tonumber(ptasValue)
             if ptas ~= nil then
 				local inventory = GetInventoryManager()
                 if inventory ~= nil then
                     inventory:call("setPTAS", ptas)
+                end
+			end
+
+            local gameRank = GetGameRankSystem()
+
+            imgui.text("Set ActionPoint")
+			local _, actionPointValue = imgui.input_text("Set ActionPoint", "");
+            local actionPoint = tonumber(actionPointValue)
+            if actionPoint ~= nil then
+                if actionPoint > 5000 then actionPoint = 5000 end
+                if actionPoint < -5000 then actionPoint = -5000 end
+                if gameRank ~= nil then
+                    gameRank:set_field("_ActionPoint", actionPoint)
+                end
+			end
+
+            imgui.text("Set ItemPoint")
+			local _, itemPointValue = imgui.input_text("Set ItemPoint", "");
+            local itemPoint = tonumber(itemPointValue)
+            if itemPoint ~= nil then
+                if itemPoint > 100000 then itemPoint = 100000 end
+                if itemPoint < 0 then itemPoint = 0 end
+                if gameRank ~= nil then
+                    gameRank:set_field("_ItemPoint", itemPoint)
                 end
 			end
 
