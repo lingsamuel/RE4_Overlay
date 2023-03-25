@@ -62,6 +62,69 @@ local function GetPlayerManager()
 	return PlayerManager
 end
 
+-- ==== Config ====
+
+local LOAD_CONFIG_FILE = true
+
+local Config = {}
+Config.uiConfig = {}
+Config.cheatConfig = {}
+
+local configPath = "RE4_Overlay/RE4_Overlay.json"
+
+function Config.Init()
+    local defaultUI = {}
+    defaultUI.Font = nil
+    defaultUI.Row = 0
+    defaultUI.RowHeight = 25
+    defaultUI.PosX = 1400
+    defaultUI.PosY = 200
+
+    local defaultDing = {}
+    defaultDing.invincible = false
+
+    Config.uiConfig = defaultUI
+    Config.cheatConfig = defaultDing
+end
+
+function Config.LoadConfig()
+	local configFile = json.load_file(configPath)
+	if configFile.dingConfig ~= nil then
+		Config.uiConfig = configFile.uiConfig
+        Config.cheatConfig = configFile.dingConfig
+	else
+        local newConfig = {}
+        newConfig.uiConfig = Config.uiConfig
+        newConfig.dingConfig = Config.cheatConfig
+		json.dump_file(configPath, newConfig)
+	end
+end
+
+function Config.SaveConfig()
+    local newConfig = {}
+    newConfig.uiConfig = Config.uiConfig
+    newConfig.dingConfig = Config.cheatConfig
+	if json.load_file(configPath) ~= newConfig then
+		json.dump_file(configPath, newConfig)
+	end
+end
+
+function Config.SwitchDing(dingStr)
+	if Config.cheatConfig[dingStr] == nil then return end
+    Config.cheatConfig[dingStr] = not Config.cheatConfig[dingStr]
+end
+
+function Config.BoolStateStr(stateStr)
+	if Config.cheatConfig[stateStr] == nil then return "error" end
+    if Config.cheatConfig[stateStr] then return "enabled" end
+    return "disabled"
+end
+
+Config.Init()
+if LOAD_CONFIG_FILE then
+	Config.LoadConfig()
+end
+
 -- ==== Utils ====
 
 local function GetEnumMap(enumTypeName)
@@ -87,9 +150,10 @@ local BodyPartsMap = GetEnumMap("chainsaw.character.BodyParts")
 local BodyPartsSideMap = GetEnumMap("chainsaw.character.BodyPartsSide")
 
 local function SetInvincible(playerBaseContext)
+    -- TODO: Should check id?
     if playerBaseContext == nil then return end
 
-    -- TODO: Should check id?
+    if Config.cheatConfig.invincible == false then return end
 
     local hp = playerBaseContext:call("get_HitPoint")
     -- shouldn't call Set_XXX in real life, it may break the save
@@ -396,4 +460,25 @@ end,
 	end
 )
 
+-- === Menu ===
+
+re.on_draw_ui(function()
+    if imgui.tree_node("RE4_Overlay") then
+        if imgui.tree_node("Cheat Utils") then
+            if imgui.button("Invincible") then
+			    Config.SwitchDing("invincible")
+		    end
+            imgui.text(Config.BoolStateStr("invincible"))
+            imgui.tree_pop()
+        end
+        if imgui.button("Save Config") then
+			Config.SaveConfig()
+		end
+        if imgui.button("Reload Config") then
+			Config.LoadConfig()
+		end
+        imgui.text("RE4_Overlay")
+        imgui.tree_pop()
+    end
+end)
 
