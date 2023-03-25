@@ -33,6 +33,12 @@ local json = json
 local draw = draw
 
 
+local InventoryManager = sdk.get_managed_singleton("chainsaw.InventoryManager")
+local function GetInventoryManager()
+    if InventoryManager == nil then InventoryManager = sdk.get_managed_singleton("chainsaw.InventoryManager") end
+	return InventoryManager
+end
+
 local GameRankSystem = sdk.get_managed_singleton("chainsaw.GameRankSystem")
 local function GetGameRankSystem()
     if GameRankSystem == nil then GameRankSystem = sdk.get_managed_singleton("chainsaw.GameRankSystem") end
@@ -108,7 +114,7 @@ if Config.EnemyUI.DisplayPartHP == nil then
     Config.EnemyUI.DisplayPartHP = true
 end
 if Config.EnemyUI.FilterNoInSightEnemy == nil then
-    Config.EnemyUI.FilterNoInSightEnemy = true
+    Config.EnemyUI.FilterNoInSightEnemy = false
 end
 
 if Config.FloatingUI == nil then
@@ -143,6 +149,10 @@ if Config.CheatConfig == nil then
         LockHitPoint = false,
     }
 end
+if Config.CheatConfig.NoHitMode == nil then
+    Config.CheatConfig.NoHitMode = false
+end
+
 if Config.DebugMode == nil then
 	Config.DebugMode = false
 end
@@ -172,24 +182,43 @@ local BodyPartsMap = GetEnumMap("chainsaw.character.BodyParts")
 local BodyPartsSideMap = GetEnumMap("chainsaw.character.BodyPartsSide")
 
 local function SetInvincible(playerBaseContext)
-    if not Config.CheatConfig.LockHitPoint then return end
-
     -- TODO: Should check id?
     if playerBaseContext == nil then return end
 
     local hp = playerBaseContext:call("get_HitPoint")
-    -- shouldn't call Set_XXX in real life, it may break the save
-    -- hp:call("set_Invincible", true)
-    -- hp:call("set_NoDamage", true)
-    -- hp:call("set_NoDeath", true)
-    -- hp:call("set_Immortal", true)
-    hp:call("recovery", 99999)
+    if Config.CheatConfig.LockHitPoint then
+        hp:call("recovery", 99999)
+    end
+
+    if Config.CheatConfig.NoHitMode then
+        -- shouldn't call Set_XXX in real life, it may break the save
+        hp:call("set_Invincible", true)
+        -- hp:call("set_NoDamage", true)
+        -- hp:call("set_NoDeath", true)
+        -- hp:call("set_Immortal", true)
+    else
+        hp:call("set_Invincible", false)
+        -- hp:call("set_NoDamage", false)
+        -- hp:call("set_NoDeath", false)
+        -- hp:call("set_Immortal", false)
+    end
 end
 
 -- ==== Hooks ====
 local RETVAL_TRUE = sdk.to_ptr(1)
 
-local PlayerBaseContext = sdk.find_type_definition("chainsaw.HitPoint")
+local TypedefPlayerBaseContext = sdk.find_type_definition("chainsaw.HitPoint")
+local TypedefInventoryManager = sdk.find_type_definition("chainsaw.InventoryManager")
+local TypedefItemUseManager = sdk.find_type_definition("chainsaw.ItemUseManager")
+local TypedefInventoryControllerBase = sdk.find_type_definition("chainsaw.InventoryControllerBase")
+
+
+-- sdk.hook(TypedefInventoryControllerBase:get_method("reduceItem(chainsaw.ItemID, System.Int32)"),
+-- function (args)
+--     return sdk.PreHookResult.SKIP_ORIGINAL
+-- end, function (retval)
+-- 	return retval
+-- end)
 
 -- These hooks doesn't work
 
@@ -303,8 +332,6 @@ local function initFont(size)
     end
     return fontTable[size]
 end
-
-local DebugMode = true
 
 d2d.register(function()
 	initFont()
@@ -496,11 +523,8 @@ end,
                         if Config.DebugMode then
                             -- kind
                             EnemyUI:NewRow(" KindID: ".. tostring(kindID) .. "/" .. kind)
-
-                            if DebugMode then
-                                EnemyUI:NewRow(" Lively: ".. tostring(enemyCtx:call("get_IsLively")))
-                                EnemyUI:NewRow(" IsCombatReady: ".. tostring(enemyCtx:call("get_IsCombatReady")))
-                            end
+                            EnemyUI:NewRow(" Lively: ".. tostring(enemyCtx:call("get_IsLively")))
+                            EnemyUI:NewRow(" IsCombatReady: ".. tostring(enemyCtx:call("get_IsCombatReady")))
                         end
 
                         -- hp
@@ -580,8 +604,22 @@ re.on_draw_ui(function()
 		configChanged = configChanged or changed
 
         if imgui.tree_node("Cheat Utils") then
-            changed, Config.CheatConfig.LockHitPoint = imgui.checkbox("Full HitPoint", Config.CheatConfig.LockHitPoint)
+            changed, Config.CheatConfig.LockHitPoint = imgui.checkbox("Full HitPoint (recovery 99999 hp every frame)", Config.CheatConfig.LockHitPoint)
             configChanged = configChanged or changed
+
+            imgui.text("No Hit Mode (WARNING: may corrupt save or have unexpected bugs, I am not sure)")
+            changed, Config.CheatConfig.NoHitMode = imgui.checkbox("No Hit Mode", Config.CheatConfig.NoHitMode)
+            configChanged = configChanged or changed
+
+            imgui.text("Set PTAS (press enter to apply)")
+			local _, ptasValue = imgui.input_text("Set PTAS", "500000");
+            local ptas = tonumber(ptasValue)
+            if ptas ~= nil then
+				local inventory = GetInventoryManager()
+                if inventory ~= nil then
+                    inventory:call("setPTAS", ptas)
+                end
+			end
 
             imgui.tree_pop()
         end
