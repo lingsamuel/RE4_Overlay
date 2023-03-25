@@ -361,6 +361,7 @@ end,
             StatsUI:NewRow("KillCount: " .. tostring(gameRank:call("get_RankPointKillCount")))
 
             StatsUI:NewRow("")
+            StatsUI:NewRow("PlayerDamageRate: " .. FloatColumn(gameRank:call("getRankPlayerDamageRate", nil)))
             StatsUI:NewRow("-- Enemy --")
             StatsUI:NewRow("DamageRate: " .. FloatColumn(gameRank:call("getRankEnemyDamageRate")))
             StatsUI:NewRow("WinceRate: " .. FloatColumn(gameRank:call("getRankEnemyWinceRate")))
