@@ -24,6 +24,8 @@
 -- chainsaw.HitPoint
 -- chainsaw.CharacterBackup
 
+-- chainsaw.SoundDetectionManager
+
 local re = re
 local sdk = sdk
 local d2d = d2d
@@ -168,6 +170,14 @@ if Config.DebugMode == nil then
 	Config.DebugMode = false
 end
 
+if Config.TesterMode == nil then
+	Config.TesterMode = false
+end
+
+if Config.DangerMode == nil then
+	Config.DangerMode = false
+end
+
 -- ==== Utils ====
 
 local function GetEnumMap(enumTypeName)
@@ -224,11 +234,60 @@ local TypedefItemUseManager = sdk.find_type_definition("chainsaw.ItemUseManager"
 local TypedefInventoryControllerBase = sdk.find_type_definition("chainsaw.InventoryControllerBase")
 local TypedefItem = sdk.find_type_definition("chainsaw.Item")
 local TypedefWeaponItem = sdk.find_type_definition("chainsaw.WeaponItem")
+local TypedefEnemyAttackPermitManager = sdk.find_type_definition("chainsaw.EnemyAttackPermitManager")
 
+local function skipMovie(movie)
+    if not Config.DangerMode then return end
 
+    if movie then
+        local time = sdk.call_native_func(movie, sdk.find_type_definition("via.movie.Movie"), "get_DurationTime")
+        sdk.call_native_func(movie, sdk.find_type_definition("via.movie.Movie"), "seek", time)
+        -- movie:seek(movie:get_DurationTime())
+    end
+end
+
+-- Fast forward movies to the end to mute audio
+local currentMovie
+sdk.hook(sdk.find_type_definition("via.movie.Movie"):get_method("play"),
+function (args)
+    currentMovie = (args[2])
+    skipMovie(currentMovie)
+end, function(ret)
+    skipMovie(currentMovie)
+    return ret
+end)
+
+local DisableAttack = true
+sdk.hook(TypedefEnemyAttackPermitManager:get_method("checkAttackPermit(chainsaw.CharacterContext, chainsaw.CharacterContext)"),
+function (args)
+    -- if Config.CheatConfig.UnlimitItemAndDurability then
+    --     return sdk.PreHookResult.SKIP_ORIGINAL
+    -- end
+end, function (retval)
+    if not Config.DangerMode then return end
+    if DisableAttack then
+        -- FIXME: this only affect melee enemy? strange
+        sdk.to_managed_object(retval):call("set_Has", false)
+    end
+	return retval
+end)
+
+local countTable = {}
 sdk.hook(TypedefItem:get_method("reduceCount(System.Int32)"),
 function (args)
-    if Config.CheatConfig.UnlimitItemAndDurability then
+    local finalCount = sdk.to_int64(args[3]) & 0xFFFFFFFF
+    local this = sdk.to_managed_object(args[2])
+    local currentCount = this:get_field("_CurrentItemCount")
+
+    if this:call("get_ItemType") == 0 then
+        -- key item
+        return
+    end
+
+    if Config.TesterMode then
+        table.insert(countTable, tostring(currentCount) .. " -> " .. tostring(finalCount) .. "/ItemID: " .. tostring(this:get_field("_ItemId")))
+    end
+    if Config.CheatConfig.UnlimitItemAndDurability and (finalCount == 0 or finalCount < currentCount) then
         return sdk.PreHookResult.SKIP_ORIGINAL
     end
 end, function (retval)
@@ -380,6 +439,11 @@ end,
 
         local StatsUI = UI:new(nil, Config.StatsUI.PosX, Config.StatsUI.PosY, Config.StatsUI.RowHeight, Config.StatsUI.Width, initFont())
 
+        if Config.TesterMode then
+            for i = 1, #countTable, 1 do
+                StatsUI:NewRow("Count: " .. tostring(countTable[i]))
+            end
+        end
         -- local posX = 1400
         -- local posY = 200
         -- local uiStep = 0
@@ -775,7 +839,13 @@ re.on_draw_ui(function()
 			imgui.tree_pop()
 		end
 
-		changed, Config.DebugMode = imgui.checkbox("DebugMode", Config.DebugMode)
+		changed, Config.DebugMode = imgui.checkbox("DebugMode (prints more fields in the overlay)", Config.DebugMode)
+		configChanged = configChanged or changed
+
+		changed, Config.TesterMode = imgui.checkbox("TesterMode (logs many data in the overlay, expected to reset script frequently to clear them)", Config.TesterMode)
+		configChanged = configChanged or changed
+
+		changed, Config.DangerMode = imgui.checkbox("DangerMode (dev only, untested, undocumented and unstable functionalities)", Config.DangerMode)
 		configChanged = configChanged or changed
 
         imgui.tree_pop()
