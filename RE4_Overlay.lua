@@ -171,8 +171,12 @@ function UI:new(o, posX, posY, font)
     return o
 end
 
+function UI:GetCurrentRowPosY()
+    return self.PosY + self.Row * self.RowHeight + 10
+end
+
 function UI:NewRow(str)
-    d2d.text(self.Font, str, self.PosX + 10, self.PosY + self.Row * self.RowHeight + 10, 0xFFFFFFFF)
+    d2d.text(self.Font, str, self.PosX + 10, self:GetCurrentRowPosY(), 0xFFFFFFFF)
     self.Row = self.Row + 1
 end
 
@@ -188,6 +192,22 @@ local function FloatColumn(val)
 end
 
 -- ==== Draw UI ====
+
+local ShouldDrawHPBar = true
+local function DrawHP(ui, name, hp, leftOffset)
+    local current = hp:call("get_CurrentHitPoint")
+    local max = hp:call("get_DefaultHitPoint")
+    ui:NewRow(name .. tostring(current) .. "/" .. tostring(max))
+
+    if ShouldDrawHPBar then
+        local width = 400
+        if leftOffset == nil then leftOffset = 0 end
+
+        d2d.fill_rect(ui.PosX + 10 + leftOffset, ui:GetCurrentRowPosY() + 4, width - 20 - leftOffset, ui.RowHeight - 8, 0xFFCCCCCC)
+        d2d.fill_rect(ui.PosX + 10 + leftOffset, ui:GetCurrentRowPosY() + 4, current/max*(width-20-leftOffset), ui.RowHeight - 8, 0xFF5c9e76)
+        ui:NewRow("")
+    end
+end
 
 local font
 local function initFont()
@@ -218,9 +238,9 @@ end,
             StatsUI:NewRow("GameRank: " .. tostring(gameRank:get_field("_GameRank")))
             StatsUI:NewRow("ActionPoint: " .. FloatColumn(gameRank:get_field("_ActionPoint")))
             StatsUI:NewRow("ItemPoint: " .. FloatColumn(gameRank:get_field("_ItemPoint")))
-            StatsUI:NewRow("BackupActionPoint: " .. FloatColumn(gameRank:get_field("BackupActionPoint")))
-            StatsUI:NewRow("BackupItemPoint: " .. FloatColumn(gameRank:get_field("BackupItemPoint")))
-            StatsUI:NewRow("FixItemPoint: " .. FloatColumn(gameRank:get_field("FixItemPoint")))
+            -- StatsUI:NewRow("BackupActionPoint: " .. FloatColumn(gameRank:get_field("BackupActionPoint")))
+            -- StatsUI:NewRow("BackupItemPoint: " .. FloatColumn(gameRank:get_field("BackupItemPoint")))
+            -- StatsUI:NewRow("FixItemPoint: " .. FloatColumn(gameRank:get_field("FixItemPoint")))
             StatsUI:NewRow("RetryCount: " .. tostring(gameRank:call("get_RankPointPlRetryCount")))
             StatsUI:NewRow("KillCount: " .. tostring(gameRank:call("get_RankPointKillCount")))
 
@@ -260,10 +280,12 @@ end,
             for i = 0, playerLen - 1, 1 do
                 local playerCtx = players:call("get_Item", i)
                 local hp = playerCtx:call("get_HitPoint")
-                StatsUI:NewRow(tostring(i) .. " HP: " ..
-                    tostring(hp:call("get_CurrentHitPoint")) .. "/" ..
-                    tostring(hp:call("get_DefaultHitPoint"))
-                )
+
+                DrawHP(StatsUI, "Player " .. tostring(i) .. " HP: ", hp)
+                -- StatsUI:NewRow("Player " .. tostring(i) .. " HP: " ..
+                --     tostring(hp:call("get_CurrentHitPoint")) .. "/" ..
+                --     tostring(hp:call("get_DefaultHitPoint"))
+                -- )
                 if i == 0 then
                     SetInvincible(playerCtx)
                 end
@@ -316,10 +338,11 @@ end,
                         end
 
                         -- hp
-                        EnemyUI:NewRow(" HP: "
-                            .. tostring(currentHP) .. "/"
-                            .. tostring(maxHP)
-                        )
+                        DrawHP(EnemyUI, " HP: ", hp)
+                        -- EnemyUI:NewRow(" HP: "
+                        --     .. tostring(currentHP) .. "/"
+                        --     .. tostring(maxHP)
+                        -- )
 
                         -- add rank
                         local addRank = enemyCtx:call("get_GameRankAdd")
@@ -341,10 +364,11 @@ end,
                                 local partMaxHP = partHP:call("get_DefaultHitPoint")
                                 if partMaxHP < 99998 then
                                     if partMaxHP ~= partCurrentHP then
-                                        EnemyUI:NewRow("  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): "
-                                            .. tostring(partCurrentHP) .. "/"
-                                            .. tostring(partMaxHP)
-                                        )
+                                        DrawHP(EnemyUI, "  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): ", partHP, 20)
+                                        -- EnemyUI:NewRow("  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): "
+                                        --     .. tostring(partCurrentHP) .. "/"
+                                        --     .. tostring(partMaxHP)
+                                        -- )
                                     end
                                 end
                             end
