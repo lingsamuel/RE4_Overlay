@@ -311,20 +311,20 @@ end, function(ret)
     return ret
 end)
 
-local DisableAttack = true
-sdk.hook(TypedefEnemyAttackPermitManager:get_method("checkAttackPermit(chainsaw.CharacterContext, chainsaw.CharacterContext)"),
-function (args)
-    -- if Config.CheatConfig.UnlimitItemAndDurability then
-    --     return sdk.PreHookResult.SKIP_ORIGINAL
-    -- end
-end, function (retval)
-    if not Config.CheatConfig.DisableEnemyAttackCheck then return end
-    if DisableAttack then
-        -- FIXME: this only affect melee enemy? strange
-        sdk.to_managed_object(retval):call("set_Has", false)
-    end
-	return retval
-end)
+-- local DisableAttack = true
+-- sdk.hook(TypedefEnemyAttackPermitManager:get_method("checkAttackPermit(chainsaw.CharacterContext, chainsaw.CharacterContext)"),
+-- function (args)
+--     -- if Config.CheatConfig.UnlimitItemAndDurability then
+--     --     return sdk.PreHookResult.SKIP_ORIGINAL
+--     -- end
+-- end, function (retval)
+--     if not Config.CheatConfig.DisableEnemyAttackCheck then return end
+--     if DisableAttack then
+--         -- FIXME: this only affect melee enemy? strange
+--         sdk.to_managed_object(retval):call("set_Has", false)
+--     end
+-- 	return retval
+-- end)
 
 local countTable = {}
 sdk.hook(TypedefItem:get_method("reduceCount(System.Int32)"),
@@ -811,8 +811,8 @@ re.on_draw_ui(function()
                 end
 			end
 
-            changed, Config.CheatConfig.DisableEnemyAttackCheck = imgui.checkbox("Disable Enemy Attack Check (doesn't work for ranged enemy)", Config.CheatConfig.DisableEnemyAttackCheck)
-            configChanged = configChanged or changed
+            -- changed, Config.CheatConfig.DisableEnemyAttackCheck = imgui.checkbox("Disable Enemy Attack Check (doesn't work for ranged enemy)", Config.CheatConfig.DisableEnemyAttackCheck)
+            -- configChanged = configChanged or changed
             changed, Config.CheatConfig.SkipCG = imgui.checkbox("Skip CG", Config.CheatConfig.SkipCG)
             configChanged = configChanged or changed
             changed, Config.CheatConfig.SkipRadio = imgui.checkbox("Skip Radio", Config.CheatConfig.SkipRadio)
