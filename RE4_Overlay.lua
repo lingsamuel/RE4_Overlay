@@ -152,6 +152,9 @@ end
 if Config.CheatConfig.NoHitMode == nil then
     Config.CheatConfig.NoHitMode = false
 end
+if Config.CheatConfig.UnlimitItemAndDurability == nil then
+    Config.CheatConfig.UnlimitItemAndDurability = false
+end
 
 if Config.DebugMode == nil then
 	Config.DebugMode = false
@@ -211,14 +214,42 @@ local TypedefPlayerBaseContext = sdk.find_type_definition("chainsaw.HitPoint")
 local TypedefInventoryManager = sdk.find_type_definition("chainsaw.InventoryManager")
 local TypedefItemUseManager = sdk.find_type_definition("chainsaw.ItemUseManager")
 local TypedefInventoryControllerBase = sdk.find_type_definition("chainsaw.InventoryControllerBase")
+local TypedefItem = sdk.find_type_definition("chainsaw.Item")
+local TypedefWeaponItem = sdk.find_type_definition("chainsaw.WeaponItem")
 
 
--- sdk.hook(TypedefInventoryControllerBase:get_method("reduceItem(chainsaw.ItemID, System.Int32)"),
--- function (args)
---     return sdk.PreHookResult.SKIP_ORIGINAL
--- end, function (retval)
--- 	return retval
--- end)
+sdk.hook(TypedefItem:get_method("reduceCount(System.Int32)"),
+function (args)
+    if Config.CheatConfig.UnlimitItemAndDurability then
+        return sdk.PreHookResult.SKIP_ORIGINAL
+    end
+end, function (retval)
+	return retval
+end)
+sdk.hook(TypedefItem:get_method("reduceDurability(System.Int32)"),
+function (args)
+    if Config.CheatConfig.UnlimitItemAndDurability then
+        return sdk.PreHookResult.SKIP_ORIGINAL
+    end
+end, function (retval)
+	return retval
+end)
+sdk.hook(TypedefWeaponItem:get_method("reduceAmmoCount(System.Int32)"),
+function (args)
+    if Config.CheatConfig.UnlimitItemAndDurability then
+        return sdk.PreHookResult.SKIP_ORIGINAL
+    end
+end, function (retval)
+	return retval
+end)
+sdk.hook(TypedefWeaponItem:get_method("reduceTacticalAmmo(System.Int32)"),
+function (args)
+    if Config.CheatConfig.UnlimitItemAndDurability then
+        return sdk.PreHookResult.SKIP_ORIGINAL
+    end
+end, function (retval)
+	return retval
+end)
 
 -- These hooks doesn't work
 
@@ -606,6 +637,8 @@ re.on_draw_ui(function()
 
         if imgui.tree_node("Cheat Utils") then
             changed, Config.CheatConfig.LockHitPoint = imgui.checkbox("Full HitPoint (recovery 99999 hp every frame)", Config.CheatConfig.LockHitPoint)
+            configChanged = configChanged or changed
+            changed, Config.CheatConfig.UnlimitItemAndDurability = imgui.checkbox("Unlimit Item and Durability (No Consumption)", Config.CheatConfig.UnlimitItemAndDurability)
             configChanged = configChanged or changed
 
             imgui.text("No Hit Mode (WARNING: may corrupt save or have unexpected bugs, I am not sure)")
