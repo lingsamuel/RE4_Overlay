@@ -24,6 +24,7 @@
 -- chainsaw.HitPoint
 -- chainsaw.CharacterBackup
 
+-- chainsaw.MovieManager
 -- chainsaw.SoundDetectionManager
 
 local re = re
@@ -34,6 +35,7 @@ local log = log
 local json = json
 local draw = draw
 
+log.info("[RE4 Overlay] Loaded");
 
 local InventoryManager = sdk.get_managed_singleton("chainsaw.InventoryManager")
 local function GetInventoryManager()
@@ -246,6 +248,22 @@ local function skipMovie(movie)
     end
 end
 
+-- Skip Radio Message
+local currentMovieLoader
+local currentMovieID
+sdk.hook(sdk.find_type_definition("chainsaw.GuiMovieLoaderBase"):get_method("setupMovie(System.Int32, System.Action`1<System.Boolean>)"),
+function (args)
+    if not Config.DangerMode then return end
+    currentMovieLoader = sdk.to_managed_object(args[2])
+    currentMovieID = sdk.to_int64(args[3]) & 0xFFFFFFFF
+    return sdk.PreHookResult.SKIP_ORIGINAL
+end, function(ret)
+    if not Config.DangerMode then return end
+    currentMovieLoader:call("stopMovie", currentMovieID)
+    return ret
+end)
+
+-- via.movie.MovieManager
 -- Fast forward movies to the end to mute audio
 local currentMovie
 sdk.hook(sdk.find_type_definition("via.movie.Movie"):get_method("play"),
