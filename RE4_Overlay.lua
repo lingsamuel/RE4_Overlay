@@ -68,7 +68,7 @@ local LOAD_CONFIG_FILE = true
 
 local Config = {}
 Config.uiConfig = {}
-Config.dingConfig = {}
+Config.cheatConfig = {}
 
 local configPath = "RE4_Overlay/RE4_Overlay.json"
 
@@ -84,18 +84,18 @@ function Config.Init()
     defaultDing.invincible = false
 
     Config.uiConfig = defaultUI
-    Config.dingConfig = defaultDing
+    Config.cheatConfig = defaultDing
 end
 
 function Config.LoadConfig()
 	local configFile = json.load_file(configPath)
 	if configFile.dingConfig ~= nil then
 		Config.uiConfig = configFile.uiConfig
-        Config.dingConfig = configFile.dingConfig
+        Config.cheatConfig = configFile.dingConfig
 	else
         local newConfig = {}
         newConfig.uiConfig = Config.uiConfig
-        newConfig.dingConfig = Config.dingConfig
+        newConfig.dingConfig = Config.cheatConfig
 		json.dump_file(configPath, newConfig)
 	end
 end
@@ -103,20 +103,20 @@ end
 function Config.SaveConfig()
     local newConfig = {}
     newConfig.uiConfig = Config.uiConfig
-    newConfig.dingConfig = Config.dingConfig
+    newConfig.dingConfig = Config.cheatConfig
 	if json.load_file(configPath) ~= newConfig then
 		json.dump_file(configPath, newConfig)
 	end
 end
 
 function Config.SwitchDing(dingStr)
-	if Config.dingConfig[dingStr] == nil then return end
-    Config.dingConfig[dingStr] = not Config.dingConfig[dingStr]
+	if Config.cheatConfig[dingStr] == nil then return end
+    Config.cheatConfig[dingStr] = not Config.cheatConfig[dingStr]
 end
 
 function Config.BoolStateStr(stateStr)
-	if Config.dingConfig[stateStr] == nil then return "error" end
-    if Config.dingConfig[stateStr] then return "enabled" end
+	if Config.cheatConfig[stateStr] == nil then return "error" end
+    if Config.cheatConfig[stateStr] then return "enabled" end
     return "disabled"
 end
 
@@ -129,7 +129,7 @@ end
 
 local function SetInvincible(playerBaseContext)
     if playerBaseContext == nil then return end
-    if Config.dingConfig.invincible == false then return end
+    if Config.cheatConfig.invincible == false then return end
     local hp = playerBaseContext:call("get_HitPoint")
     -- shouldn't call Set_XXX in real life, it may break the save
     -- hp:call("set_Invincible", true)
