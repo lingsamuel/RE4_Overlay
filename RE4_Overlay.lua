@@ -294,7 +294,6 @@ end,
             for i = 0, enemyLen - 1, 1 do
                 local enemyCtx = inCameraEnemy:call("get_Item", i)
 
-                -- hp
                 local hp = enemyCtx:call("get_HitPoint")
                 if hp ~= nil then
                     local currentHP = hp:call("get_CurrentHitPoint")
@@ -302,15 +301,16 @@ end,
                     if currentHP > 0 then
                         EnemyUI:NewRow("Enemy: " .. tostring(i))
 
-                        EnemyUI:NewRow(" HP: "
-                            .. tostring(currentHP) .. "/"
-                            .. tostring(maxHP)
-                        )
-
                         -- kind
                         local kindID = enemyCtx:call("get_KindID")
                         local kind = KindMap[kindID]
                         EnemyUI:NewRow(" KindID: ".. tostring(kindID) .. "/" .. kind)
+
+                        -- hp
+                        EnemyUI:NewRow(" HP: "
+                            .. tostring(currentHP) .. "/"
+                            .. tostring(maxHP)
+                        )
 
                         -- add rank
                         local addRank = enemyCtx:call("get_GameRankAdd")
