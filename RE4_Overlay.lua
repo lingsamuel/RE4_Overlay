@@ -173,6 +173,9 @@ end
 if Config.CheatConfig.SkipRadio == nil then
     Config.CheatConfig.SkipRadio = false
 end
+if Config.CheatConfig.DisableEnemyAttackCheck == nil then
+    Config.CheatConfig.DisableEnemyAttackCheck = false
+end
 
 if Config.DebugMode == nil then
 	Config.DebugMode = false
@@ -235,6 +238,7 @@ end
 
 -- ==== Hooks ====
 local RETVAL_TRUE = sdk.to_ptr(1)
+local RETVAL_FALSE = sdk.to_ptr(0)
 
 local TypedefPlayerBaseContext = sdk.find_type_definition("chainsaw.HitPoint")
 local TypedefInventoryManager = sdk.find_type_definition("chainsaw.InventoryManager")
@@ -243,6 +247,14 @@ local TypedefInventoryControllerBase = sdk.find_type_definition("chainsaw.Invent
 local TypedefItem = sdk.find_type_definition("chainsaw.Item")
 local TypedefWeaponItem = sdk.find_type_definition("chainsaw.WeaponItem")
 local TypedefEnemyAttackPermitManager = sdk.find_type_definition("chainsaw.EnemyAttackPermitManager")
+
+-- sdk.hook(sdk.find_type_definition("chainsaw.EnemyBehaviorTreeCondition_Base"):get_method("evaluate(via.behaviortree.ConditionArg)"),
+-- function (args)
+-- end, function(ret)
+--     -- FIXME: this will affect Player?? and causes CTD
+--     -- return RETVAL_FALSE
+--     return ret
+-- end)
 
 local function skipMovie(movie)
     if not Config.DangerMode then return end
@@ -306,7 +318,7 @@ function (args)
     --     return sdk.PreHookResult.SKIP_ORIGINAL
     -- end
 end, function (retval)
-    if not Config.DangerMode then return end
+    if not Config.CheatConfig.DisableEnemyAttackCheck then return end
     if DisableAttack then
         -- FIXME: this only affect melee enemy? strange
         sdk.to_managed_object(retval):call("set_Has", false)
@@ -647,12 +659,16 @@ end,
                             worldPos.z = worldPos.z + Config.FloatingUI.WorldPosOffsetZ
                             local screenPos = draw.world_to_screen(worldPos)
 
+                            local floatingX = screenPos.x + Config.FloatingUI.ScreenPosOffsetX
+                            local floatingY = screenPos.y + Config.FloatingUI.ScreenPosOffsetY
                             if Config.FloatingUI.DisplayNumber then
-                                d2d.text(initFont(Config.FloatingUI.FontSize), "HP: " .. tostring(currentHP) .. "/" .. tostring(maxHP), screenPos.x + Config.FloatingUI.ScreenPosOffsetX, screenPos.y + Config.FloatingUI.ScreenPosOffsetY - 24, 0xFFFFFFFF)
+                                local hpMsg = "HP: " .. tostring(currentHP) .. "/" .. tostring(maxHP)
+                                -- hpMsg = hpMsg .. " / " .. tostring(enemyCtx:call("get_ItemDropCount"))
+                                d2d.text(initFont(Config.FloatingUI.FontSize), hpMsg, floatingX, floatingY - 24, 0xFFFFFFFF)
                             end
-                            d2d.fill_rect(screenPos.x + Config.FloatingUI.ScreenPosOffsetX - 1, screenPos.y + Config.FloatingUI.ScreenPosOffsetY - 1, width + 2, height + 2, 0xFF000000)
-                            d2d.fill_rect(screenPos.x + Config.FloatingUI.ScreenPosOffsetX, screenPos.y + Config.FloatingUI.ScreenPosOffsetY, width, height, 0xFFCCCCCC)
-                            d2d.fill_rect(screenPos.x + Config.FloatingUI.ScreenPosOffsetX, screenPos.y + Config.FloatingUI.ScreenPosOffsetY, currentHP / maxHP * width, height, 0xFF5c9e76)
+                            d2d.fill_rect(floatingX - 1, floatingY - 1, width + 2, height + 2, 0xFF000000)
+                            d2d.fill_rect(floatingX, floatingY, width, height, 0xFFCCCCCC)
+                            d2d.fill_rect(floatingX, floatingY, currentHP / maxHP * width, height, 0xFF5c9e76)
                         end
 
                     end
@@ -795,6 +811,8 @@ re.on_draw_ui(function()
                 end
 			end
 
+            changed, Config.CheatConfig.DisableEnemyAttackCheck = imgui.checkbox("Disable Enemy Attack Check (doesn't work for ranged enemy)", Config.CheatConfig.DisableEnemyAttackCheck)
+            configChanged = configChanged or changed
             changed, Config.CheatConfig.SkipCG = imgui.checkbox("Skip CG", Config.CheatConfig.SkipCG)
             configChanged = configChanged or changed
             changed, Config.CheatConfig.SkipRadio = imgui.checkbox("Skip Radio", Config.CheatConfig.SkipRadio)
