@@ -104,6 +104,12 @@ end
 if Config.EnemyUI.Enabled == nil then
     Config.EnemyUI.Enabled = true
 end
+if Config.EnemyUI.DisplayPartHP == nil then
+    Config.EnemyUI.DisplayPartHP = true
+end
+if Config.EnemyUI.FilterNoInSightEnemy == nil then
+    Config.EnemyUI.FilterNoInSightEnemy = true
+end
 
 if Config.FloatingUI == nil then
     Config.FloatingUI = {
@@ -289,12 +295,13 @@ local function DrawHP(ui, name, hp, drawHPBar, width, leftOffset)
     end
 end
 
-local font
-local function initFont()
-    if font == nil then
-        font = d2d.Font.new("Tahoma", 24, true)
+local fontTable = {}
+local function initFont(size)
+    if size == nil then size = 24 end
+    if fontTable[size] == nil then
+        fontTable[size] = d2d.Font.new("Tahoma", size, true)
     end
-    return font
+    return fontTable[size]
 end
 
 local DebugMode = true
@@ -395,15 +402,21 @@ end,
 
             EnemyUI:DrawBackground(40)
             EnemyUI:NewRow("-- Enemey UI --")
-            local inCameraEnemy = enemy:call("get_CameraInsideEnemyContextRefs") -- chainsaw.EnemyBaseContext[]
-            local enemyLen = inCameraEnemy:call("get_Count")
+
+            local enemies
+            if Config.EnemyUI.FilterNoInSightEnemy then
+                enemies = enemy:call("get_CameraInsideEnemyContextRefs") -- chainsaw.EnemyBaseContext[]
+            else
+                enemies = GetEnemyList()
+            end
+            local enemyLen = enemies:call("get_Count")
 
             if Config.DebugMode then
                 EnemyUI:NewRow("EnemyCount: " .. tostring(enemyLen))
             end
 
             for i = 0, enemyLen - 1, 1 do
-                local enemyCtx = inCameraEnemy:call("get_Item", i)
+                local enemyCtx = enemies:call("get_Item", i)
 
                 local lively = enemyCtx:call("get_IsLively")
                 local combatReady = enemyCtx:call("get_IsCombatReady")
@@ -468,6 +481,9 @@ end,
                             worldPos.z = worldPos.z + Config.FloatingUI.WorldPosOffsetZ
                             local screenPos = draw.world_to_screen(worldPos)
 
+                            if Config.FloatingUI.DisplayNumber then
+                                d2d.text(initFont(18), "HP: " .. tostring(currentHP) .. "/" .. tostring(maxHP), screenPos.x + Config.FloatingUI.ScreenPosOffsetX, screenPos.y + Config.FloatingUI.ScreenPosOffsetY - 24, 0xFFFFFFFF)
+                            end
                             d2d.fill_rect(screenPos.x + Config.FloatingUI.ScreenPosOffsetX, screenPos.y + Config.FloatingUI.ScreenPosOffsetY, width, height, 0xFFCCCCCC)
                             d2d.fill_rect(screenPos.x + Config.FloatingUI.ScreenPosOffsetX, screenPos.y + Config.FloatingUI.ScreenPosOffsetY, currentHP / maxHP * width, height, 0xFF5c9e76)
                         end
@@ -493,23 +509,6 @@ end,
                                 EnemyUI:NewRow(" IsCombatReady: ".. tostring(enemyCtx:call("get_IsCombatReady")))
                             end
                         end
-
-                        -- local playerPos = masterPlayer:call("get_Position")
-                        -- local worldPos = enemyCtx:call("get_Position")
-                        -- local delta = playerPos - worldPos
-                        -- local distance = math.sqrt(delta.x * delta.x + delta.y * delta.y)
-
-                        -- local maxDistance = 15
-                        -- if distance < 15 then
-                        --     local height = 14 * (maxDistance - distance) / maxDistance
-                        --     local width = 400 * (maxDistance - distance) / maxDistance
-
-                        --     worldPos.y = worldPos.y + 2
-                        --     local screenPos = draw.world_to_screen(worldPos)
-
-                        --     d2d.fill_rect(screenPos.x - 80, screenPos.y, width, height, 0xFFCCCCCC)
-                        --     d2d.fill_rect(screenPos.x - 80, screenPos.y, currentHP / maxHP * width, height, 0xFF5c9e76)
-                        -- end
 
                         -- hp
                         DrawHP(EnemyUI, " HP: ", hp, Config.EnemyUI.DrawEnemyHPBar, Config.EnemyUI.Width, 0)
@@ -545,7 +544,9 @@ end,
                                     allow = allow and partMaxHP < maxHP
                                 end
                                 if allow then
-                                    DrawHP(EnemyUI, "  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): ", partHP, Config.EnemyUI.DrawPartHPBar, Config.EnemyUI.Width, 20)
+                                    if Config.EnemyUI.DisplayPartHP then
+                                        DrawHP(EnemyUI, "  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): ", partHP, Config.EnemyUI.DrawPartHPBar, Config.EnemyUI.Width, 20)
+                                    end
                                     -- EnemyUI:NewRow("  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): "
                                     --     .. tostring(partCurrentHP) .. "/"
                                     --     .. tostring(partMaxHP)
@@ -611,6 +612,8 @@ re.on_draw_ui(function()
             configChanged = configChanged or changed
             changed, Config.EnemyUI.DrawEnemyHPBar = imgui.checkbox("Draw Enemy HP Bar", Config.EnemyUI.DrawEnemyHPBar)
             configChanged = configChanged or changed
+            changed, Config.EnemyUI.DisplayPartHP = imgui.checkbox("Dispaly Enemy Part HP", Config.EnemyUI.DisplayPartHP)
+            configChanged = configChanged or changed
             changed, Config.EnemyUI.DrawPartHPBar = imgui.checkbox("Draw Enemy Part HP Bar", Config.EnemyUI.DrawPartHPBar)
             configChanged = configChanged or changed
             changed, Config.EnemyUI.FilterMaxHPEnemy = imgui.checkbox("Filter Max HP Enemy", Config.EnemyUI.FilterMaxHPEnemy)
@@ -618,6 +621,8 @@ re.on_draw_ui(function()
             changed, Config.EnemyUI.FilterMaxHPPart = imgui.checkbox("Filter Max HP Part", Config.EnemyUI.FilterMaxHPPart)
             configChanged = configChanged or changed
             changed, Config.EnemyUI.FilterUnbreakablePart = imgui.checkbox("Filter Unbreakable Part", Config.EnemyUI.FilterUnbreakablePart)
+            configChanged = configChanged or changed
+            changed, Config.EnemyUI.FilterNoInSightEnemy = imgui.checkbox("Filter No In Sight Enemy", Config.EnemyUI.FilterNoInSightEnemy)
             configChanged = configChanged or changed
 
 			_, Config.EnemyUI.PosX = imgui.drag_int("PosX", Config.EnemyUI.PosX, 20, 0, 4000)
