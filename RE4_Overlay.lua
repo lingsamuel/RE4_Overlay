@@ -310,6 +310,8 @@ d2d.register(function()
 	initFont()
 end,
 	function()
+        if not Config.Enabled then return end
+
         local StatsUI = UI:new(nil, Config.StatsUI.PosX, Config.StatsUI.PosY, Config.StatsUI.RowHeight, Config.StatsUI.Width, initFont())
 
         -- local posX = 1400
@@ -319,7 +321,7 @@ end,
         -- d2d.fill_rect(posX, posY, 240, 220, 0x69000000)
         local gameRank = GetGameRankSystem()
         -- local gameRank
-        if gameRank ~= nil then
+        if Config.StatsUI.Enabled and gameRank ~= nil then
             StatsUI:DrawBackground(17)
 
             StatsUI:NewRow("GameRank: " .. tostring(gameRank:get_field("_GameRank")))
@@ -340,18 +342,7 @@ end,
 
             StatsUI:NewRow("")
             StatsUI:NewRow("KnifeReduceRate: " .. FloatColumn(gameRank:call("getKnifeReduceRate")))
-            -- d2d.text(font, "GameRank: " .. tostring(gameRank:get_field("_GameRank")), posX + 10, posY + uiStep * 25 + 10, 0xFFFFFFFF)
-            -- uiStep = uiStep + 1
-            -- d2d.text(font, "ActionPoint: " .. tostring(gameRank:get_field("_ActionPoint")), posX + 10, posY + uiStep * 25 + 10, 0xFFFFFFFF)
-            -- uiStep = uiStep + 1
-            -- d2d.text(font, "ItemPoint: " .. tostring(gameRank:get_field("_ItemPoint")), posX + 10, posY + uiStep * 25 + 10, 0xFFFFFFFF)
-            -- uiStep = uiStep + 1
             StatsUI:NewRow("")
-        else
-            StatsUI:DrawBackground(1)
-            StatsUI:NewRow("GameRankSystem is nil")
-            -- d2d.text(font, "GameRankSystem is nil", posX + 10, posY + uiStep * 25 + 10, 0xFFFFFFFF)
-            -- uiStep = uiStep + 1
         end
 
         -- local attackPermit = GetEnemyAttackPermitManager()
@@ -370,7 +361,9 @@ end,
                 local playerCtx = players:call("get_Item", i)
                 local hp = playerCtx:call("get_HitPoint")
 
-                DrawHP(StatsUI, "Player " .. tostring(i) .. " HP: ", hp, Config.StatsUI.DrawPlayerHPBar, Config.StatsUI.Width, 0)
+                if Config.StatsUI.Enabled then
+                    DrawHP(StatsUI, "Player " .. tostring(i) .. " HP: ", hp, Config.StatsUI.DrawPlayerHPBar, Config.StatsUI.Width, 0)
+                end
                 -- StatsUI:NewRow("Player " .. tostring(i) .. " HP: " ..
                 --     tostring(hp:call("get_CurrentHitPoint")) .. "/" ..
                 --     tostring(hp:call("get_DefaultHitPoint"))
@@ -383,7 +376,7 @@ end,
         end
 
         local player = GetPlayerManager()
-        if player ~= nil then
+        if Config.StatsUI.Enabled and player ~= nil then
             -- StatsUI:NewRow("1P HP: " .. FloatColumn(player:call("get_WwisePlayerHPRatio_1P")))
             -- StatsUI:NewRow("2P HP: " .. FloatColumn(player:call("get_WwisePlayerHPRatio_2P")))
             StatsUI:NewRow("Player Distance: " .. FloatColumn(player:call("get_WwisePlayerDistance")))
@@ -495,7 +488,7 @@ end,
                     if Config.EnemyUI.FilterMaxHPEnemy then
                         allowEnemy = allowEnemy and currentHP < maxHP
                     end
-                    if allowEnemy then
+                    if Config.EnemyUI.Enabled and allowEnemy then
                         EnemyUI:NewRow("Enemy: " .. tostring(i))
 
                         local kindID = enemyCtx:call("get_KindID")
@@ -612,7 +605,7 @@ re.on_draw_ui(function()
             configChanged = configChanged or changed
             changed, Config.EnemyUI.DrawEnemyHPBar = imgui.checkbox("Draw Enemy HP Bar", Config.EnemyUI.DrawEnemyHPBar)
             configChanged = configChanged or changed
-            changed, Config.EnemyUI.DisplayPartHP = imgui.checkbox("Dispaly Enemy Part HP", Config.EnemyUI.DisplayPartHP)
+            changed, Config.EnemyUI.DisplayPartHP = imgui.checkbox("Dispaly Enemy Part HP Number", Config.EnemyUI.DisplayPartHP)
             configChanged = configChanged or changed
             changed, Config.EnemyUI.DrawPartHPBar = imgui.checkbox("Draw Enemy Part HP Bar", Config.EnemyUI.DrawPartHPBar)
             configChanged = configChanged or changed
@@ -622,7 +615,7 @@ re.on_draw_ui(function()
             configChanged = configChanged or changed
             changed, Config.EnemyUI.FilterUnbreakablePart = imgui.checkbox("Filter Unbreakable Part", Config.EnemyUI.FilterUnbreakablePart)
             configChanged = configChanged or changed
-            changed, Config.EnemyUI.FilterNoInSightEnemy = imgui.checkbox("Filter No In Sight Enemy", Config.EnemyUI.FilterNoInSightEnemy)
+            changed, Config.EnemyUI.FilterNoInSightEnemy = imgui.checkbox("Filter No In Sight Enemy (disable to show all enemey)", Config.EnemyUI.FilterNoInSightEnemy)
             configChanged = configChanged or changed
 
 			_, Config.EnemyUI.PosX = imgui.drag_int("PosX", Config.EnemyUI.PosX, 20, 0, 4000)
@@ -652,13 +645,16 @@ re.on_draw_ui(function()
             changed, Config.FloatingUI.DisplayNumber = imgui.checkbox("Display Detailed Number", Config.FloatingUI.DisplayNumber)
             configChanged = configChanged or changed
 
+            imgui.text("\nWorld pos offset in 3D game world")
 			_, Config.FloatingUI.WorldPosOffsetX = imgui.drag_float("World Pos Offset X", Config.FloatingUI.WorldPosOffsetX, 0.01, -10, 10, "%.2f")
 			_, Config.FloatingUI.WorldPosOffsetY = imgui.drag_float("World Pos Offset Y", Config.FloatingUI.WorldPosOffsetY, 0.01, -10, 10, "%.2f")
 			_, Config.FloatingUI.WorldPosOffsetZ = imgui.drag_float("World Pos Offset Z", Config.FloatingUI.WorldPosOffsetZ, 0.01, -10, 10, "%.2f")
 
+            imgui.text("\nWorld pos offset in 2d screen")
 			_, Config.FloatingUI.ScreenPosOffsetX = imgui.drag_int("Screen Pos Offset X", Config.FloatingUI.ScreenPosOffsetX, 1, -4000, 4000)
 			_, Config.FloatingUI.ScreenPosOffsetY = imgui.drag_int("Screen Pos Offset Y", Config.FloatingUI.ScreenPosOffsetY, 1, -4000, 4000)
 
+            imgui.text("\nFloating HP bar height and width")
 			_, Config.FloatingUI.Height = imgui.drag_int("Height", Config.FloatingUI.Height, 1, 10, 100)
 			_, Config.FloatingUI.Width = imgui.drag_int("Width", Config.FloatingUI.Width, 1, 10, 1000)
             changed, Config.FloatingUI.ScaleHeightByDistance = imgui.checkbox("Scale Height By Distance", Config.FloatingUI.ScaleHeightByDistance)
