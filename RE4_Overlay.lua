@@ -544,6 +544,7 @@ end,
                             if Config.FloatingUI.DisplayNumber then
                                 d2d.text(initFont(Config.FloatingUI.FontSize), "HP: " .. tostring(currentHP) .. "/" .. tostring(maxHP), screenPos.x + Config.FloatingUI.ScreenPosOffsetX, screenPos.y + Config.FloatingUI.ScreenPosOffsetY - 24, 0xFFFFFFFF)
                             end
+                            d2d.fill_rect(screenPos.x + Config.FloatingUI.ScreenPosOffsetX - 1, screenPos.y + Config.FloatingUI.ScreenPosOffsetY - 1, width + 2, height + 2, 0xFF000000)
                             d2d.fill_rect(screenPos.x + Config.FloatingUI.ScreenPosOffsetX, screenPos.y + Config.FloatingUI.ScreenPosOffsetY, width, height, 0xFFCCCCCC)
                             d2d.fill_rect(screenPos.x + Config.FloatingUI.ScreenPosOffsetX, screenPos.y + Config.FloatingUI.ScreenPosOffsetY, currentHP / maxHP * width, height, 0xFF5c9e76)
                         end
