@@ -167,6 +167,12 @@ end
 if Config.CheatConfig.UnlimitItemAndDurability == nil then
     Config.CheatConfig.UnlimitItemAndDurability = false
 end
+if Config.CheatConfig.SkipCG == nil then
+    Config.CheatConfig.SkipCG = false
+end
+if Config.CheatConfig.SkipRadio == nil then
+    Config.CheatConfig.SkipRadio = false
+end
 
 if Config.DebugMode == nil then
 	Config.DebugMode = false
@@ -248,17 +254,35 @@ local function skipMovie(movie)
     end
 end
 
+-- via.timeline.GameObjectClipPlayer
+-- chainsaw.TimelineEventManager
+-- MovieManager skipMovie
+-- chainsaw.TimelineEventPlayer play
+
+-- Skip Cutscene Real time render CG
+local currentTimelineEventWork
+sdk.hook(sdk.find_type_definition("chainsaw.TimelineEventWork"):get_method("play"),
+function (args)
+    if not Config.CheatConfig.SkipCG then return end
+    currentTimelineEventWork = sdk.to_managed_object(args[2])
+    -- return sdk.PreHookResult.SKIP_ORIGINAL
+end, function(ret)
+    if not Config.CheatConfig.SkipCG then return end
+    currentTimelineEventWork:call("skip")
+    return ret
+end)
+
 -- Skip Radio Message
 local currentMovieLoader
 local currentMovieID
 sdk.hook(sdk.find_type_definition("chainsaw.GuiMovieLoaderBase"):get_method("setupMovie(System.Int32, System.Action`1<System.Boolean>)"),
 function (args)
-    if not Config.DangerMode then return end
+    if not Config.CheatConfig.SkipRadio then return end
     currentMovieLoader = sdk.to_managed_object(args[2])
     currentMovieID = sdk.to_int64(args[3]) & 0xFFFFFFFF
     return sdk.PreHookResult.SKIP_ORIGINAL
 end, function(ret)
-    if not Config.DangerMode then return end
+    if not Config.CheatConfig.SkipRadio then return end
     currentMovieLoader:call("stopMovie", currentMovieID)
     return ret
 end)
@@ -771,6 +795,10 @@ re.on_draw_ui(function()
                 end
 			end
 
+            changed, Config.CheatConfig.SkipCG = imgui.checkbox("Skip CG", Config.CheatConfig.SkipCG)
+            configChanged = configChanged or changed
+            changed, Config.CheatConfig.SkipRadio = imgui.checkbox("Skip Radio", Config.CheatConfig.SkipRadio)
+            configChanged = configChanged or changed
             imgui.tree_pop()
         end
 
