@@ -30,6 +30,7 @@ local d2d = d2d
 local imgui = imgui
 local log = log
 local json = json
+local draw = draw
 
 
 local GameRankSystem = sdk.get_managed_singleton("chainsaw.GameRankSystem")
@@ -48,6 +49,12 @@ local CharacterManager = sdk.get_managed_singleton("chainsaw.CharacterManager")
 local function GetCharacterManager()
     if CharacterManager == nil then CharacterManager = sdk.get_managed_singleton("chainsaw.CharacterManager") end
 	return CharacterManager
+end
+
+local function GetEnemyList()
+    local cha = GetCharacterManager()
+    if cha == nil then return nil end
+    return cha:call("get_EnemyContextList")
 end
 
 local EnemyManager = CharacterManager:call("get_EnemyManager")
@@ -77,6 +84,10 @@ if Config.StatsUI == nil then
         DrawPlayerHPBar = false,
     }
 end
+if Config.StatsUI.Enabled == nil then
+    Config.StatsUI.Enabled = true
+end
+
 if Config.EnemyUI == nil then
     Config.EnemyUI = {
         PosX = 0,
@@ -90,6 +101,37 @@ if Config.EnemyUI == nil then
         FilterUnbreakablePart = true,
     }
 end
+if Config.EnemyUI.Enabled == nil then
+    Config.EnemyUI.Enabled = true
+end
+
+if Config.FloatingUI == nil then
+    Config.FloatingUI = {
+        Enabled = true,
+
+        FilterMaxHPEnemy = false,
+        FilterBlockedEnemy = true,
+        MaxDistance = 15,
+        IgnoreDistanceIfDamaged = true,
+        IgnoreDistanceIfDamagedScale = 0.8,
+
+        DisplayNumber = false,
+
+        WorldPosOffsetX = 0,
+        WorldPosOffsetY = 1.75,
+        WorldPosOffsetZ = 0,
+
+        ScreenPosOffsetX = -125,
+        ScreenPosOffsetY = 0,
+
+        Height = 14,
+        Width = 200,
+        MinScale = 0.3,
+        ScaleHeightByDistance = true,
+        ScaleWidthByDistance = false,
+    }
+end
+
 if Config.CheatConfig == nil then
     Config.CheatConfig = {
         LockHitPoint = false,
@@ -310,6 +352,8 @@ end,
         --     StatsUI:NewRow("NowGameRank: " .. tostring(attackPermit:get_field("NowGameRank")))
         -- end
 
+        local masterPlayer = nil
+
         local character = GetCharacterManager()
         if character ~= nil then
             local players = character:call("get_PlayerAndPartnerContextList") -- List<chainsaw.CharacterContext>
@@ -325,6 +369,7 @@ end,
                 --     tostring(hp:call("get_DefaultHitPoint"))
                 -- )
                 if i == 0 then
+                    masterPlayer = playerCtx
                     SetInvincible(playerCtx)
                 end
             end
@@ -366,6 +411,70 @@ end,
                 if lively and combatReady and hp ~= nil then
                     local currentHP = hp:call("get_CurrentHitPoint")
                     local maxHP = hp:call("get_DefaultHitPoint")
+
+                    -- Floating UI
+                    if Config.FloatingUI.Enabled and masterPlayer ~= nil then
+                        local allowFloating = true
+
+                        local playerPos = masterPlayer:call("get_Position")
+                        local worldPos = enemyCtx:call("get_Position")
+                        local delta = playerPos - worldPos
+                        local distance = math.sqrt(delta.x * delta.x + delta.y * delta.y)
+
+                        if Config.FloatingUI.FilterMaxHPEnemy and currentHP >= maxHP then
+                            allowFloating = false
+                        end
+
+                        if distance > Config.FloatingUI.MaxDistance then
+                            if Config.FloatingUI.IgnoreDistanceIfDamaged and currentHP < maxHP then
+                                allowFloating = true
+                            else
+                                allowFloating = false
+                            end
+                        end
+
+                        if Config.FloatingUI.FilterBlockedEnemy then
+                            allowFloating = allowFloating and enemyCtx:call("get_HasRayToPlayer")
+                        end
+
+                        if Config.DebugMode then
+                            EnemyUI:NewRow("Enemy: " .. tostring(i) .. " Distance: ".. FloatColumn(distance))
+                        end
+
+                        if allowFloating then
+                            local height = Config.FloatingUI.Height
+                            local width = Config.FloatingUI.Width
+
+                            local scale = (Config.FloatingUI.MaxDistance - distance) / Config.FloatingUI.MaxDistance
+                            if distance > Config.FloatingUI.MaxDistance then
+                                scale = Config.FloatingUI.IgnoreDistanceIfDamagedScale
+                            end
+                            if scale < Config.FloatingUI.MinScale then
+                                scale = Config.FloatingUI.MinScale
+                            end
+                            if Config.FloatingUI.ScaleHeightByDistance then
+                                height = height * scale
+                            end
+                            if Config.FloatingUI.ScaleWidthByDistance then
+                                width = width * scale
+                            end
+
+                            if Config.DebugMode then
+                                EnemyUI:NewRow("Enemy: " .. tostring(i) .. " Bar Scale: ".. FloatColumn(scale))
+                            end
+
+                            worldPos.x = worldPos.x + Config.FloatingUI.WorldPosOffsetX
+                            worldPos.y = worldPos.y + Config.FloatingUI.WorldPosOffsetY
+                            worldPos.z = worldPos.z + Config.FloatingUI.WorldPosOffsetZ
+                            local screenPos = draw.world_to_screen(worldPos)
+
+                            d2d.fill_rect(screenPos.x + Config.FloatingUI.ScreenPosOffsetX, screenPos.y + Config.FloatingUI.ScreenPosOffsetY, width, height, 0xFFCCCCCC)
+                            d2d.fill_rect(screenPos.x + Config.FloatingUI.ScreenPosOffsetX, screenPos.y + Config.FloatingUI.ScreenPosOffsetY, currentHP / maxHP * width, height, 0xFF5c9e76)
+                        end
+
+                    end
+
+                    -- Enemy UI Panel
                     local allowEnemy = currentHP > 0
                     if Config.EnemyUI.FilterMaxHPEnemy then
                         allowEnemy = allowEnemy and currentHP < maxHP
@@ -384,6 +493,23 @@ end,
                                 EnemyUI:NewRow(" IsCombatReady: ".. tostring(enemyCtx:call("get_IsCombatReady")))
                             end
                         end
+
+                        -- local playerPos = masterPlayer:call("get_Position")
+                        -- local worldPos = enemyCtx:call("get_Position")
+                        -- local delta = playerPos - worldPos
+                        -- local distance = math.sqrt(delta.x * delta.x + delta.y * delta.y)
+
+                        -- local maxDistance = 15
+                        -- if distance < 15 then
+                        --     local height = 14 * (maxDistance - distance) / maxDistance
+                        --     local width = 400 * (maxDistance - distance) / maxDistance
+
+                        --     worldPos.y = worldPos.y + 2
+                        --     local screenPos = draw.world_to_screen(worldPos)
+
+                        --     d2d.fill_rect(screenPos.x - 80, screenPos.y, width, height, 0xFFCCCCCC)
+                        --     d2d.fill_rect(screenPos.x - 80, screenPos.y, currentHP / maxHP * width, height, 0xFF5c9e76)
+                        -- end
 
                         -- hp
                         DrawHP(EnemyUI, " HP: ", hp, Config.EnemyUI.DrawEnemyHPBar, Config.EnemyUI.Width, 0)
@@ -467,6 +593,8 @@ re.on_draw_ui(function()
         end
 
 		if imgui.tree_node("Customize Stats UI") then
+            changed, Config.StatsUI.Enabled = imgui.checkbox("Enabled", Config.StatsUI.Enabled)
+            configChanged = configChanged or changed
             changed, Config.StatsUI.DrawPlayerHPBar = imgui.checkbox("Draw Player HP Bar", Config.StatsUI.DrawPlayerHPBar)
             configChanged = configChanged or changed
 
@@ -479,6 +607,8 @@ re.on_draw_ui(function()
 		end
 
 		if imgui.tree_node("Customize Enemy UI") then
+            changed, Config.EnemyUI.Enabled = imgui.checkbox("Enabled", Config.EnemyUI.Enabled)
+            configChanged = configChanged or changed
             changed, Config.EnemyUI.DrawEnemyHPBar = imgui.checkbox("Draw Enemy HP Bar", Config.EnemyUI.DrawEnemyHPBar)
             configChanged = configChanged or changed
             changed, Config.EnemyUI.DrawPartHPBar = imgui.checkbox("Draw Enemy Part HP Bar", Config.EnemyUI.DrawPartHPBar)
@@ -498,10 +628,51 @@ re.on_draw_ui(function()
 			imgui.tree_pop()
 		end
 
+		if imgui.tree_node("Customize Floating Enemy UI") then
+            changed, Config.FloatingUI.Enabled = imgui.checkbox("Enabled", Config.FloatingUI.Enabled)
+            configChanged = configChanged or changed
+            changed, Config.FloatingUI.FilterMaxHPEnemy = imgui.checkbox("Filter Max HP Enemy", Config.FloatingUI.FilterMaxHPEnemy)
+            configChanged = configChanged or changed
+            changed, Config.FloatingUI.FilterBlockedEnemy = imgui.checkbox("Filter Blocked Enemy", Config.FloatingUI.FilterBlockedEnemy)
+            configChanged = configChanged or changed
+
+            changed, Config.FloatingUI.MaxDistance = imgui.drag_float("Max Display Distance", Config.FloatingUI.MaxDistance, 0.1, 0.1, 1000, "%.1f")
+            configChanged = configChanged or changed
+            changed, Config.FloatingUI.IgnoreDistanceIfDamaged = imgui.checkbox("Ignore Distance Limit If Damaged", Config.FloatingUI.IgnoreDistanceIfDamaged)
+            configChanged = configChanged or changed
+
+            changed, Config.FloatingUI.IgnoreDistanceIfDamagedScale = imgui.drag_float("Ignore Distance Limit If Damaged UI Scale", Config.FloatingUI.IgnoreDistanceIfDamagedScale, 0.01, 0.01, 10, "%.2f")
+            configChanged = configChanged or changed
+
+            changed, Config.FloatingUI.DisplayNumber = imgui.checkbox("Display Detailed Number", Config.FloatingUI.DisplayNumber)
+            configChanged = configChanged or changed
+
+			_, Config.FloatingUI.WorldPosOffsetX = imgui.drag_float("World Pos Offset X", Config.FloatingUI.WorldPosOffsetX, 0.01, -10, 10, "%.2f")
+			_, Config.FloatingUI.WorldPosOffsetY = imgui.drag_float("World Pos Offset Y", Config.FloatingUI.WorldPosOffsetY, 0.01, -10, 10, "%.2f")
+			_, Config.FloatingUI.WorldPosOffsetZ = imgui.drag_float("World Pos Offset Z", Config.FloatingUI.WorldPosOffsetZ, 0.01, -10, 10, "%.2f")
+
+			_, Config.FloatingUI.ScreenPosOffsetX = imgui.drag_int("Screen Pos Offset X", Config.FloatingUI.ScreenPosOffsetX, 1, -4000, 4000)
+			_, Config.FloatingUI.ScreenPosOffsetY = imgui.drag_int("Screen Pos Offset Y", Config.FloatingUI.ScreenPosOffsetY, 1, -4000, 4000)
+
+			_, Config.FloatingUI.Height = imgui.drag_int("Height", Config.FloatingUI.Height, 1, 10, 100)
+			_, Config.FloatingUI.Width = imgui.drag_int("Width", Config.FloatingUI.Width, 1, 10, 1000)
+            changed, Config.FloatingUI.ScaleHeightByDistance = imgui.checkbox("Scale Height By Distance", Config.FloatingUI.ScaleHeightByDistance)
+            configChanged = configChanged or changed
+            changed, Config.FloatingUI.ScaleWidthByDistance = imgui.checkbox("Scale Width By Distance", Config.FloatingUI.ScaleWidthByDistance)
+            configChanged = configChanged or changed
+            _, Config.FloatingUI.MinScale = imgui.drag_float("Min Scale", Config.FloatingUI.MinScale, 0.01, 0.1, 10, "%.2f")
+
+			imgui.tree_pop()
+		end
+
 		changed, Config.DebugMode = imgui.checkbox("DebugMode", Config.DebugMode)
 		configChanged = configChanged or changed
 
         imgui.tree_pop()
+
+        if configChanged then
+            json.dump_file("RE4_Overlay/RE4_Overlay.json", Config)
+        end
     end
 end)
 
