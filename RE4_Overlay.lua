@@ -81,6 +81,10 @@ local Config = json.load_file("RE4_Overlay/RE4_Overlay.json") or {}
 if Config.Enabled == nil then
     Config.Enabled = true
 end
+if Config.FontSize == nil then
+    Config.FontSize = 24
+end
+
 if Config.StatsUI == nil then
     Config.StatsUI = {
         PosX = 1400,
@@ -142,6 +146,10 @@ if Config.FloatingUI == nil then
         ScaleHeightByDistance = true,
         ScaleWidthByDistance = false,
     }
+end
+
+if Config.FloatingUI.FontSize == nil then
+    Config.FloatingUI.FontSize = 18
 end
 
 if Config.CheatConfig == nil then
@@ -357,7 +365,7 @@ end
 
 local fontTable = {}
 local function initFont(size)
-    if size == nil then size = 24 end
+    if size == nil then size = Config.FontSize end
     if fontTable[size] == nil then
         fontTable[size] = d2d.Font.new("Tahoma", size, true)
     end
@@ -534,7 +542,7 @@ end,
                             local screenPos = draw.world_to_screen(worldPos)
 
                             if Config.FloatingUI.DisplayNumber then
-                                d2d.text(initFont(18), "HP: " .. tostring(currentHP) .. "/" .. tostring(maxHP), screenPos.x + Config.FloatingUI.ScreenPosOffsetX, screenPos.y + Config.FloatingUI.ScreenPosOffsetY - 24, 0xFFFFFFFF)
+                                d2d.text(initFont(Config.FloatingUI.FontSize), "HP: " .. tostring(currentHP) .. "/" .. tostring(maxHP), screenPos.x + Config.FloatingUI.ScreenPosOffsetX, screenPos.y + Config.FloatingUI.ScreenPosOffsetY - 24, 0xFFFFFFFF)
                             end
                             d2d.fill_rect(screenPos.x + Config.FloatingUI.ScreenPosOffsetX, screenPos.y + Config.FloatingUI.ScreenPosOffsetY, width, height, 0xFFCCCCCC)
                             d2d.fill_rect(screenPos.x + Config.FloatingUI.ScreenPosOffsetX, screenPos.y + Config.FloatingUI.ScreenPosOffsetY, currentHP / maxHP * width, height, 0xFF5c9e76)
@@ -635,6 +643,7 @@ re.on_draw_ui(function()
 		changed, Config.Enabled = imgui.checkbox("Enabled", Config.Enabled)
 		configChanged = configChanged or changed
 
+        _, Config.FontSize = imgui.drag_int("Font Size", Config.FontSize, 1, 10, 30)
         if imgui.tree_node("Cheat Utils") then
             changed, Config.CheatConfig.LockHitPoint = imgui.checkbox("Full HitPoint (recovery 99999 hp every frame)", Config.CheatConfig.LockHitPoint)
             configChanged = configChanged or changed
@@ -725,6 +734,7 @@ re.on_draw_ui(function()
 		if imgui.tree_node("Customize Floating Enemy UI") then
             changed, Config.FloatingUI.Enabled = imgui.checkbox("Enabled", Config.FloatingUI.Enabled)
             configChanged = configChanged or changed
+
             changed, Config.FloatingUI.FilterMaxHPEnemy = imgui.checkbox("Filter Max HP Enemy", Config.FloatingUI.FilterMaxHPEnemy)
             configChanged = configChanged or changed
             changed, Config.FloatingUI.FilterBlockedEnemy = imgui.checkbox("Filter Blocked Enemy", Config.FloatingUI.FilterBlockedEnemy)
@@ -738,8 +748,10 @@ re.on_draw_ui(function()
             changed, Config.FloatingUI.IgnoreDistanceIfDamagedScale = imgui.drag_float("Ignore Distance Limit If Damaged UI Scale", Config.FloatingUI.IgnoreDistanceIfDamagedScale, 0.01, 0.01, 10, "%.2f")
             configChanged = configChanged or changed
 
+            imgui.text("")
             changed, Config.FloatingUI.DisplayNumber = imgui.checkbox("Display Detailed Number", Config.FloatingUI.DisplayNumber)
             configChanged = configChanged or changed
+            _, Config.FloatingUI.FontSize = imgui.drag_int("Font Size", Config.FloatingUI.FontSize, 1, 10, 30)
 
             imgui.text("\nWorld pos offset in 3D game world")
 			_, Config.FloatingUI.WorldPosOffsetX = imgui.drag_float("World Pos Offset X", Config.FloatingUI.WorldPosOffsetX, 0.01, -10, 10, "%.2f")
