@@ -197,6 +197,8 @@ local function initFont()
     return font
 end
 
+local DebugMode = true
+
 d2d.register(function()
 	initFont()
 end,
@@ -294,8 +296,10 @@ end,
             for i = 0, enemyLen - 1, 1 do
                 local enemyCtx = inCameraEnemy:call("get_Item", i)
 
+                local lively = enemyCtx:call("get_IsLively")
+                local combatReady = enemyCtx:call("get_IsCombatReady")
                 local hp = enemyCtx:call("get_HitPoint")
-                if hp ~= nil then
+                if lively and combatReady and hp ~= nil then
                     local currentHP = hp:call("get_CurrentHitPoint")
                     local maxHP = hp:call("get_DefaultHitPoint")
                     if currentHP > 0 then
@@ -305,6 +309,11 @@ end,
                         local kindID = enemyCtx:call("get_KindID")
                         local kind = KindMap[kindID]
                         EnemyUI:NewRow(" KindID: ".. tostring(kindID) .. "/" .. kind)
+
+                        if DebugMode then
+                            EnemyUI:NewRow(" Lively: ".. tostring(enemyCtx:call("get_IsLively")))
+                            EnemyUI:NewRow(" IsCombatReady: ".. tostring(enemyCtx:call("get_IsCombatReady")))
+                        end
 
                         -- hp
                         EnemyUI:NewRow(" HP: "
@@ -348,7 +357,7 @@ end,
 
                         if kind == "ch1_d6z0" then
                             -- chainsaw.Ch1d6z0Context
-
+                            EnemyUI:NewRow(" WeakPointType: " .. tostring(enemyCtx:call("get_WeakPointType")))
                         end
                     end
                 end
