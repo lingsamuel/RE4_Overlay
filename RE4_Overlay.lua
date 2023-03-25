@@ -62,6 +62,22 @@ local function GetPlayerManager()
 	return PlayerManager
 end
 
+-- ==== Utils ====
+
+local function SetInvincible(playerBaseContext)
+    if playerBaseContext == nil then return end
+
+    local hp = playerBaseContext:call("get_HitPoint")
+    -- shouldn't call Set_XXX in real life, it may break the save
+    -- hp:call("set_Invincible", true)
+    -- hp:call("set_NoDamage", true)
+    -- hp:call("set_NoDeath", true)
+    -- hp:call("set_Immortal", true)
+    hp:call("recovery", 99999)
+end
+
+-- ==== Hooks ====
+
 -- ==== UI ====
 
 local UI = {}
@@ -155,10 +171,28 @@ end,
         --     UI.NewRow("NowGameRank: " .. tostring(attackPermit:get_field("NowGameRank")))
         -- end
 
+        local character = GetCharacterManager()
+        if character ~= nil then
+            local players = character:call("get_PlayerAndPartnerContextList") -- List<chainsaw.CharacterContext>
+            
+            local playerLen = players:call("get_Count")
+            for i = 0, playerLen - 1, 1 do
+                local playerCtx = players:call("get_Item", i)
+                local hp = playerCtx:call("get_HitPoint")
+                UI.NewRow(tostring(i) .. " HP: " .. 
+                    tostring(hp:call("get_CurrentHitPoint")) .. "/" .. 
+                    tostring(hp:call("get_DefaultHitPoint"))
+                )
+                if i == 0 then
+                    SetInvincible(playerCtx)
+                end
+            end
+        end
+
         local player = GetPlayerManager()
         if player ~= nil then
-            UI.NewRow("1P HP: " .. FloatColumn(player:call("get_WwisePlayerHPRatio_1P")))
-            UI.NewRow("2P HP: " .. FloatColumn(player:call("get_WwisePlayerHPRatio_2P")))
+            -- UI.NewRow("1P HP: " .. FloatColumn(player:call("get_WwisePlayerHPRatio_1P")))
+            -- UI.NewRow("2P HP: " .. FloatColumn(player:call("get_WwisePlayerHPRatio_2P")))
             UI.NewRow("Player Distance: " .. FloatColumn(player:call("get_WwisePlayerDistance")))
             UI.NewRow("")
         end
