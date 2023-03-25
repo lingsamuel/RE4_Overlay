@@ -64,65 +64,39 @@ end
 
 -- ==== Config ====
 
-local LOAD_CONFIG_FILE = true
-
-local Config = {}
-Config.uiConfig = {}
-Config.cheatConfig = {}
-
-local configPath = "RE4_Overlay/RE4_Overlay.json"
-
-function Config.Init()
-    local defaultUI = {}
-    defaultUI.Font = nil
-    defaultUI.Row = 0
-    defaultUI.RowHeight = 25
-    defaultUI.PosX = 1400
-    defaultUI.PosY = 200
-
-    local defaultDing = {}
-    defaultDing.invincible = false
-
-    Config.uiConfig = defaultUI
-    Config.cheatConfig = defaultDing
+local Config = json.load_file("RE4_Overlay/RE4_Overlay.json") or {}
+if Config.Enabled == nil then
+    Config.Enabled = true
 end
-
-function Config.LoadConfig()
-	local configFile = json.load_file(configPath)
-	if configFile.dingConfig ~= nil then
-		Config.uiConfig = configFile.uiConfig
-        Config.cheatConfig = configFile.dingConfig
-	else
-        local newConfig = {}
-        newConfig.uiConfig = Config.uiConfig
-        newConfig.dingConfig = Config.cheatConfig
-		json.dump_file(configPath, newConfig)
-	end
+if Config.StatsUI == nil then
+    Config.StatsUI = {
+        PosX = 1400,
+        PosY = 200,
+        RowHeight = 25,
+        Width = 400,
+        DrawPlayerHPBar = false,
+    }
 end
-
-function Config.SaveConfig()
-    local newConfig = {}
-    newConfig.uiConfig = Config.uiConfig
-    newConfig.dingConfig = Config.cheatConfig
-	if json.load_file(configPath) ~= newConfig then
-		json.dump_file(configPath, newConfig)
-	end
+if Config.EnemyUI == nil then
+    Config.EnemyUI = {
+        PosX = 0,
+        PosY = 200,
+        RowHeight = 25,
+        Width = 400,
+        DrawEnemyHPBar = true,
+        DrawPartHPBar = true,
+        FilterMaxHPEnemy = true,
+        FilterMaxHPPart = true,
+        FilterUnbreakablePart = true,
+    }
 end
-
-function Config.SwitchDing(dingStr)
-	if Config.cheatConfig[dingStr] == nil then return end
-    Config.cheatConfig[dingStr] = not Config.cheatConfig[dingStr]
+if Config.CheatConfig == nil then
+    Config.CheatConfig = {
+        LockHitPoint = false,
+    }
 end
-
-function Config.BoolStateStr(stateStr)
-	if Config.cheatConfig[stateStr] == nil then return "error" end
-    if Config.cheatConfig[stateStr] then return "enabled" end
-    return "disabled"
-end
-
-Config.Init()
-if LOAD_CONFIG_FILE then
-	Config.LoadConfig()
+if Config.DebugMode == nil then
+	Config.DebugMode = false
 end
 
 -- ==== Utils ====
@@ -150,10 +124,10 @@ local BodyPartsMap = GetEnumMap("chainsaw.character.BodyParts")
 local BodyPartsSideMap = GetEnumMap("chainsaw.character.BodyPartsSide")
 
 local function SetInvincible(playerBaseContext)
+    if not Config.CheatConfig.LockHitPoint then return end
+
     -- TODO: Should check id?
     if playerBaseContext == nil then return end
-
-    if Config.cheatConfig.invincible == false then return end
 
     local hp = playerBaseContext:call("get_HitPoint")
     -- shouldn't call Set_XXX in real life, it may break the save
@@ -165,7 +139,6 @@ local function SetInvincible(playerBaseContext)
 end
 
 -- ==== Hooks ====
-local invincibleMode = true
 local RETVAL_TRUE = sdk.to_ptr(1)
 
 local PlayerBaseContext = sdk.find_type_definition("chainsaw.HitPoint")
@@ -220,18 +193,20 @@ local UI = {
     RowHeight = 25,
     PosX = 1400,
     PosY = 200,
+    Width = 400,
 }
 
-function UI:new(o, posX, posY, font)
+function UI:new(o, posX, posY, rowHeight, width, font)
     o = o or {}
     setmetatable(o, self)
     self.__index = self
 
     self.Font = font
     self.Row = 0
-    self.RowHeight = 25
+    self.RowHeight = rowHeight
     self.PosX = posX
     self.PosY = posY
+    self.Width = width
     return o
 end
 
@@ -244,8 +219,8 @@ function UI:NewRow(str)
     self.Row = self.Row + 1
 end
 
-function UI:DrawBackground(rows, width)
-    d2d.fill_rect(self.PosX, self.PosY, width, rows * self.RowHeight + 20, 0x69000000)
+function UI:DrawBackground(rows)
+    d2d.fill_rect(self.PosX, self.PosY, self.Width, rows * self.RowHeight + 20, 0x69000000)
 end
 
 local function FloatColumn(val)
@@ -257,14 +232,13 @@ end
 
 -- ==== Draw UI ====
 
-local ShouldDrawHPBar = true
-local function DrawHP(ui, name, hp, leftOffset)
+-- drawHPBar, width, leftOffset are optional
+local function DrawHP(ui, name, hp, drawHPBar, width, leftOffset)
     local current = hp:call("get_CurrentHitPoint")
     local max = hp:call("get_DefaultHitPoint")
     ui:NewRow(name .. tostring(current) .. "/" .. tostring(max))
 
-    if ShouldDrawHPBar then
-        local width = 400
+    if drawHPBar then
         if leftOffset == nil then leftOffset = 0 end
 
         d2d.fill_rect(ui.PosX + 10 + leftOffset, ui:GetCurrentRowPosY() + 4, width - 20 - leftOffset, ui.RowHeight - 8, 0xFFCCCCCC)
@@ -287,7 +261,7 @@ d2d.register(function()
 	initFont()
 end,
 	function()
-        local StatsUI = UI:new(nil, 1400, 200, initFont())
+        local StatsUI = UI:new(nil, Config.StatsUI.PosX, Config.StatsUI.PosY, Config.StatsUI.RowHeight, Config.StatsUI.Width, initFont())
 
         -- local posX = 1400
         -- local posY = 200
@@ -297,7 +271,7 @@ end,
         local gameRank = GetGameRankSystem()
         -- local gameRank
         if gameRank ~= nil then
-            StatsUI:DrawBackground(3, 240)
+            StatsUI:DrawBackground(17)
 
             StatsUI:NewRow("GameRank: " .. tostring(gameRank:get_field("_GameRank")))
             StatsUI:NewRow("ActionPoint: " .. FloatColumn(gameRank:get_field("_ActionPoint")))
@@ -325,7 +299,7 @@ end,
             -- uiStep = uiStep + 1
             StatsUI:NewRow("")
         else
-            StatsUI:DrawBackground(1, 240)
+            StatsUI:DrawBackground(1)
             StatsUI:NewRow("GameRankSystem is nil")
             -- d2d.text(font, "GameRankSystem is nil", posX + 10, posY + uiStep * 25 + 10, 0xFFFFFFFF)
             -- uiStep = uiStep + 1
@@ -345,7 +319,7 @@ end,
                 local playerCtx = players:call("get_Item", i)
                 local hp = playerCtx:call("get_HitPoint")
 
-                DrawHP(StatsUI, "Player " .. tostring(i) .. " HP: ", hp)
+                DrawHP(StatsUI, "Player " .. tostring(i) .. " HP: ", hp, Config.StatsUI.DrawPlayerHPBar, Config.StatsUI.Width, 0)
                 -- StatsUI:NewRow("Player " .. tostring(i) .. " HP: " ..
                 --     tostring(hp:call("get_CurrentHitPoint")) .. "/" ..
                 --     tostring(hp:call("get_DefaultHitPoint"))
@@ -366,7 +340,7 @@ end,
 
         local enemy = GetEnemyManager()
         if enemy ~= nil then
-            local EnemyUI = UI:new(nil, 0, 200, initFont())
+            local EnemyUI = UI:new(nil, Config.EnemyUI.PosX, Config.EnemyUI.PosY, Config.EnemyUI.RowHeight, Config.EnemyUI.Width, initFont())
 
             -- -- local list = enemy:call("get_LinkEnemyList") -- List<chainsaw.EnemeyHeadUpdater>
 
@@ -374,11 +348,15 @@ end,
 
             -- local combatEnemy = enemy:get_field("_CombatEnemyCollection") -- Hashset<UInt32> -- GUID? pointer?
 
-            EnemyUI:DrawBackground(10, 600)
+            EnemyUI:DrawBackground(40)
             EnemyUI:NewRow("-- Enemey UI --")
             local inCameraEnemy = enemy:call("get_CameraInsideEnemyContextRefs") -- chainsaw.EnemyBaseContext[]
             local enemyLen = inCameraEnemy:call("get_Count")
-            EnemyUI:NewRow("EnemyCount: " .. tostring(enemyLen))
+
+            if Config.DebugMode then
+                EnemyUI:NewRow("EnemyCount: " .. tostring(enemyLen))
+            end
+
             for i = 0, enemyLen - 1, 1 do
                 local enemyCtx = inCameraEnemy:call("get_Item", i)
 
@@ -388,21 +366,27 @@ end,
                 if lively and combatReady and hp ~= nil then
                     local currentHP = hp:call("get_CurrentHitPoint")
                     local maxHP = hp:call("get_DefaultHitPoint")
-                    if currentHP > 0 then
+                    local allowEnemy = currentHP > 0
+                    if Config.EnemyUI.FilterMaxHPEnemy then
+                        allowEnemy = allowEnemy and currentHP < maxHP
+                    end
+                    if allowEnemy then
                         EnemyUI:NewRow("Enemy: " .. tostring(i))
 
-                        -- kind
                         local kindID = enemyCtx:call("get_KindID")
                         local kind = KindMap[kindID]
-                        EnemyUI:NewRow(" KindID: ".. tostring(kindID) .. "/" .. kind)
+                        if Config.DebugMode then
+                            -- kind
+                            EnemyUI:NewRow(" KindID: ".. tostring(kindID) .. "/" .. kind)
 
-                        if DebugMode then
-                            EnemyUI:NewRow(" Lively: ".. tostring(enemyCtx:call("get_IsLively")))
-                            EnemyUI:NewRow(" IsCombatReady: ".. tostring(enemyCtx:call("get_IsCombatReady")))
+                            if DebugMode then
+                                EnemyUI:NewRow(" Lively: ".. tostring(enemyCtx:call("get_IsLively")))
+                                EnemyUI:NewRow(" IsCombatReady: ".. tostring(enemyCtx:call("get_IsCombatReady")))
+                            end
                         end
 
                         -- hp
-                        DrawHP(EnemyUI, " HP: ", hp)
+                        DrawHP(EnemyUI, " HP: ", hp, Config.EnemyUI.DrawEnemyHPBar, Config.EnemyUI.Width, 0)
                         -- EnemyUI:NewRow(" HP: "
                         --     .. tostring(currentHP) .. "/"
                         --     .. tostring(maxHP)
@@ -426,14 +410,20 @@ end,
                             if partHP ~= nil then
                                 local partCurrentHP = partHP:call("get_CurrentHitPoint")
                                 local partMaxHP = partHP:call("get_DefaultHitPoint")
-                                if partMaxHP < 99998 then
-                                    if partMaxHP ~= partCurrentHP then
-                                        DrawHP(EnemyUI, "  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): ", partHP, 20)
-                                        -- EnemyUI:NewRow("  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): "
-                                        --     .. tostring(partCurrentHP) .. "/"
-                                        --     .. tostring(partMaxHP)
-                                        -- )
-                                    end
+
+                                local allow = true
+                                if Config.EnemyUI.FilterMaxHPPart then
+                                    allow = allow and partCurrentHP < partMaxHP
+                                end
+                                if Config.EnemyUI.FilterUnbreakablePart then
+                                    allow = allow and partMaxHP < maxHP
+                                end
+                                if allow then
+                                    DrawHP(EnemyUI, "  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): ", partHP, Config.EnemyUI.DrawPartHPBar, Config.EnemyUI.Width, 20)
+                                    -- EnemyUI:NewRow("  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): "
+                                    --     .. tostring(partCurrentHP) .. "/"
+                                    --     .. tostring(partMaxHP)
+                                    -- )
                                 end
                             end
                             j = j + 1
@@ -463,22 +453,58 @@ end,
 -- === Menu ===
 
 re.on_draw_ui(function()
-    if imgui.tree_node("RE4_Overlay") then
+	local configChanged = false
+    if imgui.tree_node("RE4 Overlay") then
+		local changed = false
+		changed, Config.Enabled = imgui.checkbox("Enabled", Config.Enabled)
+		configChanged = configChanged or changed
+
         if imgui.tree_node("Cheat Utils") then
-            if imgui.button("Invincible") then
-			    Config.SwitchDing("invincible")
-		    end
-            imgui.text(Config.BoolStateStr("invincible"))
+            changed, Config.CheatConfig.LockHitPoint = imgui.checkbox("Full HitPoint", Config.CheatConfig.LockHitPoint)
+            configChanged = configChanged or changed
+
             imgui.tree_pop()
         end
-        if imgui.button("Save Config") then
-			Config.SaveConfig()
+
+		if imgui.tree_node("Customize Stats UI") then
+            changed, Config.StatsUI.DrawPlayerHPBar = imgui.checkbox("Draw Player HP Bar", Config.StatsUI.DrawPlayerHPBar)
+            configChanged = configChanged or changed
+
+			_, Config.StatsUI.PosX = imgui.drag_int("PosX", Config.StatsUI.PosX, 20, 0, 4000)
+			_, Config.StatsUI.PosY = imgui.drag_int("PosY", Config.StatsUI.PosY, 20, 0, 4000)
+			_, Config.StatsUI.RowHeight = imgui.drag_int("RowHeight", Config.StatsUI.RowHeight, 1, 10, 100)
+			_, Config.StatsUI.Width = imgui.drag_int("Width", Config.StatsUI.Width, 1, 10, 1000)
+
+			imgui.tree_pop()
 		end
-        if imgui.button("Reload Config") then
-			Config.LoadConfig()
+
+		if imgui.tree_node("Customize Enemy UI") then
+            changed, Config.EnemyUI.DrawEnemyHPBar = imgui.checkbox("Draw Enemy HP Bar", Config.EnemyUI.DrawEnemyHPBar)
+            configChanged = configChanged or changed
+            changed, Config.EnemyUI.DrawPartHPBar = imgui.checkbox("Draw Enemy Part HP Bar", Config.EnemyUI.DrawPartHPBar)
+            configChanged = configChanged or changed
+            changed, Config.EnemyUI.FilterMaxHPEnemy = imgui.checkbox("Filter Max HP Enemy", Config.EnemyUI.FilterMaxHPEnemy)
+            configChanged = configChanged or changed
+            changed, Config.EnemyUI.FilterMaxHPPart = imgui.checkbox("Filter Max HP Part", Config.EnemyUI.FilterMaxHPPart)
+            configChanged = configChanged or changed
+            changed, Config.EnemyUI.FilterUnbreakablePart = imgui.checkbox("Filter Unbreakable Part", Config.EnemyUI.FilterUnbreakablePart)
+            configChanged = configChanged or changed
+
+			_, Config.EnemyUI.PosX = imgui.drag_int("PosX", Config.EnemyUI.PosX, 20, 0, 4000)
+			_, Config.EnemyUI.PosY = imgui.drag_int("PosY", Config.EnemyUI.PosY, 20, 0, 4000)
+			_, Config.EnemyUI.RowHeight = imgui.drag_int("RowHeight", Config.EnemyUI.RowHeight, 1, 10, 100)
+			_, Config.EnemyUI.Width = imgui.drag_int("Width", Config.EnemyUI.Width, 1, 10, 1000)
+
+			imgui.tree_pop()
 		end
-        imgui.text("RE4_Overlay")
+
+		changed, Config.DebugMode = imgui.checkbox("DebugMode", Config.DebugMode)
+		configChanged = configChanged or changed
+
         imgui.tree_pop()
     end
 end)
 
+re.on_config_save(function()
+	json.dump_file("RE4_Overlay/RE4_Overlay.json", Config)
+end)
