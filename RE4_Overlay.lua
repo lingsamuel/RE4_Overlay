@@ -648,7 +648,7 @@ re.on_draw_ui(function()
         if imgui.tree_node("Cheat Utils") then
             changed, Config.CheatConfig.LockHitPoint = imgui.checkbox("Full HitPoint (recovery 99999 hp every frame)", Config.CheatConfig.LockHitPoint)
             configChanged = configChanged or changed
-            changed, Config.CheatConfig.UnlimitItemAndDurability = imgui.checkbox("Unlimit Item and Durability (No Consumption)", Config.CheatConfig.UnlimitItemAndDurability)
+            changed, Config.CheatConfig.UnlimitItemAndDurability = imgui.checkbox("Infinite Item and Durability (No Consumption)", Config.CheatConfig.UnlimitItemAndDurability)
             configChanged = configChanged or changed
 
             imgui.text("No Hit Mode (WARNING: may corrupt save or have unexpected bugs, I am not sure)")
