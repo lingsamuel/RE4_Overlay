@@ -300,22 +300,22 @@ end,
                     local currentHP = hp:call("get_CurrentHitPoint")
                     local maxHP = hp:call("get_DefaultHitPoint")
                     if currentHP > 0 then
+                        EnemyUI:NewRow("Enemy: " .. tostring(i))
+
                         EnemyUI:NewRow(" HP: "
                             .. tostring(currentHP) .. "/"
                             .. tostring(maxHP)
                         )
 
-                        EnemyUI:NewRow("Enemy: " .. tostring(i))
-
                         -- kind
                         local kindID = enemyCtx:call("get_KindID")
                         local kind = KindMap[kindID]
-                        EnemyUI:NewRow("KindID: ".. tostring(kindID) .. "/" .. kind)
+                        EnemyUI:NewRow(" KindID: ".. tostring(kindID) .. "/" .. kind)
 
                         -- add rank
                         local addRank = enemyCtx:call("get_GameRankAdd")
                         if addRank ~= 0 then
-                            EnemyUI:NewRow("GameRankAdd: " .. tostring(addRank))
+                            EnemyUI:NewRow(" GameRankAdd: " .. tostring(addRank))
                         end
 
                         -- parts
@@ -331,7 +331,7 @@ end,
                                 local partCurrentHP = partHP:call("get_CurrentHitPoint")
                                 local partMaxHP = partHP:call("get_DefaultHitPoint")
                                 if partMaxHP < 99998 then
-                                    if maxHP ~= currentHP then
+                                    if partMaxHP ~= partCurrentHP then
                                         EnemyUI:NewRow("  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): "
                                             .. tostring(partCurrentHP) .. "/"
                                             .. tostring(partMaxHP)
