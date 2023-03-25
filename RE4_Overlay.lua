@@ -127,9 +127,34 @@ end
 
 -- ==== Utils ====
 
+local function GetEnumMap(enumTypeName)
+	local t = sdk.find_type_definition(enumTypeName)
+	if not t then return {} end
+
+	local fields = t:get_fields()
+	local enum = {}
+
+	for i, field in ipairs(fields) do
+		if field:is_static() then
+			local name = field:get_name()
+			local raw_value = field:get_data(nil)
+			enum[raw_value] = name
+		end
+	end
+
+	return enum
+end
+
+local KindMap = GetEnumMap("chainsaw.CharacterKindID")
+local BodyPartsMap = GetEnumMap("chainsaw.character.BodyParts")
+local BodyPartsSideMap = GetEnumMap("chainsaw.character.BodyPartsSide")
+
 local function SetInvincible(playerBaseContext)
+    -- TODO: Should check id?
     if playerBaseContext == nil then return end
+
     if Config.cheatConfig.invincible == false then return end
+
     local hp = playerBaseContext:call("get_HitPoint")
     -- shouldn't call Set_XXX in real life, it may break the save
     -- hp:call("set_Invincible", true)
@@ -140,28 +165,87 @@ local function SetInvincible(playerBaseContext)
 end
 
 -- ==== Hooks ====
+local invincibleMode = true
+local RETVAL_TRUE = sdk.to_ptr(1)
+
+local PlayerBaseContext = sdk.find_type_definition("chainsaw.HitPoint")
+
+-- These hooks doesn't work
+
+-- sdk.hook(PlayerBaseContext:get_method("get_Invincible"),
+-- function (args)
+
+-- end, function (retval)
+--     if invincibleMode then
+--         return RETVAL_TRUE
+--     end
+-- 	return retval
+-- end)
+
+-- sdk.hook(PlayerBaseContext:get_method("get_NoDamage"),
+-- function (args)
+
+-- end, function (retval)
+--     if invincibleMode then
+--         return RETVAL_TRUE
+--     end
+-- 	return retval
+-- end)
+
+-- sdk.hook(PlayerBaseContext:get_method("get_NoDeath"),
+-- function (args)
+
+-- end, function (retval)
+--     if invincibleMode then
+--         return RETVAL_TRUE
+--     end
+-- 	return retval
+-- end)
+
+-- sdk.hook(PlayerBaseContext:get_method("get_Immortal"),
+-- function (args)
+
+-- end, function (retval)
+--     if invincibleMode then
+--         return RETVAL_TRUE
+--     end
+-- 	return retval
+-- end)
 
 -- ==== UI ====
 
-local UI = {}
-UI.Font = nil
-UI.Row = 0
-UI.RowHeight = 25
-UI.PosX = 1400
-UI.PosY = 200
+local UI = {
+    Font = nil,
+    Row = 0,
+    RowHeight = 25,
+    PosX = 1400,
+    PosY = 200,
+}
 
-function UI.Init(font)
-    UI.Font = font
-    UI.Row = 0
+function UI:new(o, posX, posY, font)
+    o = o or {}
+    setmetatable(o, self)
+    self.__index = self
+
+    self.Font = font
+    self.Row = 0
+    self.RowHeight = 25
+    self.PosX = posX
+    self.PosY = posY
+    return o
 end
 
-function UI.NewRow(str)
-    d2d.text(UI.Font, str, UI.PosX + 10, UI.PosY + UI.Row * UI.RowHeight + 10, 0xFFFFFFFF)
-    UI.Row = UI.Row + 1
+function UI:GetCurrentRowPosY()
+    return self.PosY + self.Row * self.RowHeight + 10
 end
 
-function UI.DrawBackground(rows)
-    d2d.fill_rect(UI.PosX, UI.PosY, 240, rows * UI.RowHeight + 20, 0x69000000)
+function UI:NewRow(str)
+    d2d.text(self.Font, str, self.PosX + 10, self:GetCurrentRowPosY(), 0xFFFFFFFF)
+    self.Row = self.Row + 1
+end
+
+function UI:DrawBackground(rows, width)
+    d2d.fill_rect(self.PosX, self.PosY, width, rows * self.RowHeight + 20, 0x69000000)
 end
 
 local function FloatColumn(val)
@@ -172,6 +256,211 @@ local function FloatColumn(val)
 end
 
 -- ==== Draw UI ====
+
+local ShouldDrawHPBar = true
+local function DrawHP(ui, name, hp, leftOffset)
+    local current = hp:call("get_CurrentHitPoint")
+    local max = hp:call("get_DefaultHitPoint")
+    ui:NewRow(name .. tostring(current) .. "/" .. tostring(max))
+
+    if ShouldDrawHPBar then
+        local width = 400
+        if leftOffset == nil then leftOffset = 0 end
+
+        d2d.fill_rect(ui.PosX + 10 + leftOffset, ui:GetCurrentRowPosY() + 4, width - 20 - leftOffset, ui.RowHeight - 8, 0xFFCCCCCC)
+        d2d.fill_rect(ui.PosX + 10 + leftOffset, ui:GetCurrentRowPosY() + 4, current/max*(width-20-leftOffset), ui.RowHeight - 8, 0xFF5c9e76)
+        ui:NewRow("")
+    end
+end
+
+local font
+local function initFont()
+    if font == nil then
+        font = d2d.Font.new("Tahoma", 24, true)
+    end
+    return font
+end
+
+local DebugMode = true
+
+d2d.register(function()
+	initFont()
+end,
+	function()
+        local StatsUI = UI:new(nil, 1400, 200, initFont())
+
+        -- local posX = 1400
+        -- local posY = 200
+        -- local uiStep = 0
+
+        -- d2d.fill_rect(posX, posY, 240, 220, 0x69000000)
+        local gameRank = GetGameRankSystem()
+        -- local gameRank
+        if gameRank ~= nil then
+            StatsUI:DrawBackground(3, 240)
+
+            StatsUI:NewRow("GameRank: " .. tostring(gameRank:get_field("_GameRank")))
+            StatsUI:NewRow("ActionPoint: " .. FloatColumn(gameRank:get_field("_ActionPoint")))
+            StatsUI:NewRow("ItemPoint: " .. FloatColumn(gameRank:get_field("_ItemPoint")))
+            -- StatsUI:NewRow("BackupActionPoint: " .. FloatColumn(gameRank:get_field("BackupActionPoint")))
+            -- StatsUI:NewRow("BackupItemPoint: " .. FloatColumn(gameRank:get_field("BackupItemPoint")))
+            -- StatsUI:NewRow("FixItemPoint: " .. FloatColumn(gameRank:get_field("FixItemPoint")))
+            StatsUI:NewRow("RetryCount: " .. tostring(gameRank:call("get_RankPointPlRetryCount")))
+            StatsUI:NewRow("KillCount: " .. tostring(gameRank:call("get_RankPointKillCount")))
+
+            StatsUI:NewRow("")
+            StatsUI:NewRow("-- Enemy --")
+            StatsUI:NewRow("DamageRate: " .. FloatColumn(gameRank:call("getRankEnemyDamageRate")))
+            StatsUI:NewRow("WinceRate: " .. FloatColumn(gameRank:call("getRankEnemyWinceRate")))
+            StatsUI:NewRow("BreakRate: " .. FloatColumn(gameRank:call("getRankEnemyBreakRate")))
+            StatsUI:NewRow("StoppingRate: " .. FloatColumn(gameRank:call("getRankEnemyStoppingRate")))
+
+            StatsUI:NewRow("")
+            StatsUI:NewRow("KnifeReduceRate: " .. FloatColumn(gameRank:call("getKnifeReduceRate")))
+            -- d2d.text(font, "GameRank: " .. tostring(gameRank:get_field("_GameRank")), posX + 10, posY + uiStep * 25 + 10, 0xFFFFFFFF)
+            -- uiStep = uiStep + 1
+            -- d2d.text(font, "ActionPoint: " .. tostring(gameRank:get_field("_ActionPoint")), posX + 10, posY + uiStep * 25 + 10, 0xFFFFFFFF)
+            -- uiStep = uiStep + 1
+            -- d2d.text(font, "ItemPoint: " .. tostring(gameRank:get_field("_ItemPoint")), posX + 10, posY + uiStep * 25 + 10, 0xFFFFFFFF)
+            -- uiStep = uiStep + 1
+            StatsUI:NewRow("")
+        else
+            StatsUI:DrawBackground(1, 240)
+            StatsUI:NewRow("GameRankSystem is nil")
+            -- d2d.text(font, "GameRankSystem is nil", posX + 10, posY + uiStep * 25 + 10, 0xFFFFFFFF)
+            -- uiStep = uiStep + 1
+        end
+
+        -- local attackPermit = GetEnemyAttackPermitManager()
+        -- if attackPermit ~= nil then
+        --     StatsUI:NewRow("NowGameRank: " .. tostring(attackPermit:get_field("NowGameRank")))
+        -- end
+
+        local character = GetCharacterManager()
+        if character ~= nil then
+            local players = character:call("get_PlayerAndPartnerContextList") -- List<chainsaw.CharacterContext>
+
+            local playerLen = players:call("get_Count")
+            for i = 0, playerLen - 1, 1 do
+                local playerCtx = players:call("get_Item", i)
+                local hp = playerCtx:call("get_HitPoint")
+
+                DrawHP(StatsUI, "Player " .. tostring(i) .. " HP: ", hp)
+                -- StatsUI:NewRow("Player " .. tostring(i) .. " HP: " ..
+                --     tostring(hp:call("get_CurrentHitPoint")) .. "/" ..
+                --     tostring(hp:call("get_DefaultHitPoint"))
+                -- )
+                if i == 0 then
+                    SetInvincible(playerCtx)
+                end
+            end
+        end
+
+        local player = GetPlayerManager()
+        if player ~= nil then
+            -- StatsUI:NewRow("1P HP: " .. FloatColumn(player:call("get_WwisePlayerHPRatio_1P")))
+            -- StatsUI:NewRow("2P HP: " .. FloatColumn(player:call("get_WwisePlayerHPRatio_2P")))
+            StatsUI:NewRow("Player Distance: " .. FloatColumn(player:call("get_WwisePlayerDistance")))
+            StatsUI:NewRow("")
+        end
+
+        local enemy = GetEnemyManager()
+        if enemy ~= nil then
+            local EnemyUI = UI:new(nil, 0, 200, initFont())
+
+            -- -- local list = enemy:call("get_LinkEnemyList") -- List<chainsaw.EnemeyHeadUpdater>
+
+            -- local combatEnemyDB = enemy:call("get_CombatEnemyDB") -- Dict<chainsaw.CharacterKindID, Hashset<UInt32>> -- guid? pointer?
+
+            -- local combatEnemy = enemy:get_field("_CombatEnemyCollection") -- Hashset<UInt32> -- GUID? pointer?
+
+            EnemyUI:DrawBackground(10, 600)
+            EnemyUI:NewRow("-- Enemey UI --")
+            local inCameraEnemy = enemy:call("get_CameraInsideEnemyContextRefs") -- chainsaw.EnemyBaseContext[]
+            local enemyLen = inCameraEnemy:call("get_Count")
+            EnemyUI:NewRow("EnemyCount: " .. tostring(enemyLen))
+            for i = 0, enemyLen - 1, 1 do
+                local enemyCtx = inCameraEnemy:call("get_Item", i)
+
+                local lively = enemyCtx:call("get_IsLively")
+                local combatReady = enemyCtx:call("get_IsCombatReady")
+                local hp = enemyCtx:call("get_HitPoint")
+                if lively and combatReady and hp ~= nil then
+                    local currentHP = hp:call("get_CurrentHitPoint")
+                    local maxHP = hp:call("get_DefaultHitPoint")
+                    if currentHP > 0 then
+                        EnemyUI:NewRow("Enemy: " .. tostring(i))
+
+                        -- kind
+                        local kindID = enemyCtx:call("get_KindID")
+                        local kind = KindMap[kindID]
+                        EnemyUI:NewRow(" KindID: ".. tostring(kindID) .. "/" .. kind)
+
+                        if DebugMode then
+                            EnemyUI:NewRow(" Lively: ".. tostring(enemyCtx:call("get_IsLively")))
+                            EnemyUI:NewRow(" IsCombatReady: ".. tostring(enemyCtx:call("get_IsCombatReady")))
+                        end
+
+                        -- hp
+                        DrawHP(EnemyUI, " HP: ", hp)
+                        -- EnemyUI:NewRow(" HP: "
+                        --     .. tostring(currentHP) .. "/"
+                        --     .. tostring(maxHP)
+                        -- )
+
+                        -- add rank
+                        local addRank = enemyCtx:call("get_GameRankAdd")
+                        if addRank ~= 0 then
+                            EnemyUI:NewRow(" GameRankAdd: " .. tostring(addRank))
+                        end
+
+                        -- parts
+                        local parts = enemyCtx:call("get_BreakPartsHitPointDict"):get_field('_entries') -- Dict<<BodyParts, BodyPartsSide>, HitPoint>
+
+                        local j = 0
+                        for _,k in pairs(parts) do
+                            local key = k:get_field('key')
+                            local bodyParts = key:get_field("Item1")
+                            local bodyPartsSide = key:get_field("Item2")
+                            local partHP = k:get_field('value')
+                            if partHP ~= nil then
+                                local partCurrentHP = partHP:call("get_CurrentHitPoint")
+                                local partMaxHP = partHP:call("get_DefaultHitPoint")
+                                if partMaxHP < 99998 then
+                                    if partMaxHP ~= partCurrentHP then
+                                        DrawHP(EnemyUI, "  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): ", partHP, 20)
+                                        -- EnemyUI:NewRow("  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): "
+                                        --     .. tostring(partCurrentHP) .. "/"
+                                        --     .. tostring(partMaxHP)
+                                        -- )
+                                    end
+                                end
+                            end
+                            j = j + 1
+                        end
+
+                        -- weakpoint
+
+                        -- WeakPointData? WeakPointUnit?
+
+                        if kind == "ch1_d6z0" then
+                            -- chainsaw.Ch1d6z0Context
+                            EnemyUI:NewRow(" WeakPointType: " .. tostring(enemyCtx:call("get_WeakPointType")))
+                        end
+                    end
+                end
+            end
+
+            -- chainsaw.EnemyBaseContext: GameRankAdd
+            -- chainsaw.CharacterContext: KindID, SpawnerID (type is ContextID?), IsRespawn, BreakPartsHitPointList, _HitPointVital
+            -- chainsaw.character.chxxxxx.WeakPointBackup
+            -- chainsaw.chxxxxxWeakPoint.Info
+            -- chainsaw.chxxxxxWeakPoint.DamageSetting
+        end
+	end
+)
+
+-- === Menu ===
 
 re.on_draw_ui(function()
     if imgui.tree_node("RE4_Overlay") then
@@ -192,113 +481,4 @@ re.on_draw_ui(function()
         imgui.tree_pop()
     end
 end)
-
-local font
-local function initFont()
-    if font == nil then
-        font = d2d.Font.new("Tahoma", 24, true)
-    end
-    return font
-end
-
-d2d.register(function()
-	initFont()
-end,
-	function()
-        UI.Init(initFont())
-
-        -- local posX = 1400
-        -- local posY = 200
-        -- local uiStep = 0
-
-        -- d2d.fill_rect(posX, posY, 240, 220, 0x69000000)
-        local gameRank = GetGameRankSystem()
-        -- local gameRank
-        if gameRank ~= nil then
-            UI.DrawBackground(3)
-
-            UI.NewRow("GameRank: " .. tostring(gameRank:get_field("_GameRank")))
-            UI.NewRow("ActionPoint: " .. tostring(gameRank:get_field("_ActionPoint")))
-            UI.NewRow("ItemPoint: " .. tostring(gameRank:get_field("_ItemPoint")))
-            UI.NewRow("BackupActionPoint: " .. tostring(gameRank:get_field("BackupActionPoint")))
-            UI.NewRow("BackupItemPoint: " .. tostring(gameRank:get_field("BackupItemPoint")))
-            UI.NewRow("FixItemPoint: " .. tostring(gameRank:get_field("FixItemPoint")))
-            UI.NewRow("RetryCount: " .. tostring(gameRank:call("get_RankPointPlRetryCount")))
-            UI.NewRow("KillCount: " .. tostring(gameRank:call("get_RankPointKillCount")))
-            
-            UI.NewRow("")
-            UI.NewRow("-- Enemy --")
-            UI.NewRow("DamageRate: " .. FloatColumn(gameRank:call("getRankEnemyDamageRate")))
-            UI.NewRow("WinceRate: " .. FloatColumn(gameRank:call("getRankEnemyWinceRate")))
-            UI.NewRow("BreakRate: " .. FloatColumn(gameRank:call("getRankEnemyBreakRate")))
-            UI.NewRow("StoppingRate: " .. FloatColumn(gameRank:call("getRankEnemyStoppingRate")))
-
-            UI.NewRow("")
-            UI.NewRow("KnifeReduceRate: " .. FloatColumn(gameRank:call("getKnifeReduceRate")))
-            -- d2d.text(font, "GameRank: " .. tostring(gameRank:get_field("_GameRank")), posX + 10, posY + uiStep * 25 + 10, 0xFFFFFFFF)
-            -- uiStep = uiStep + 1
-            -- d2d.text(font, "ActionPoint: " .. tostring(gameRank:get_field("_ActionPoint")), posX + 10, posY + uiStep * 25 + 10, 0xFFFFFFFF)
-            -- uiStep = uiStep + 1
-            -- d2d.text(font, "ItemPoint: " .. tostring(gameRank:get_field("_ItemPoint")), posX + 10, posY + uiStep * 25 + 10, 0xFFFFFFFF)
-            -- uiStep = uiStep + 1
-            UI.NewRow("")
-        else
-            UI.DrawBackground(1)
-            UI.NewRow("GameRankSystem is nil")
-            -- d2d.text(font, "GameRankSystem is nil", posX + 10, posY + uiStep * 25 + 10, 0xFFFFFFFF)
-            -- uiStep = uiStep + 1
-        end
-
-        -- local attackPermit = GetEnemyAttackPermitManager()
-        -- if attackPermit ~= nil then
-        --     UI.NewRow("NowGameRank: " .. tostring(attackPermit:get_field("NowGameRank")))
-        -- end
-
-        local character = GetCharacterManager()
-        if character ~= nil then
-            local players = character:call("get_PlayerAndPartnerContextList") -- List<chainsaw.CharacterContext>
-            
-            local playerLen = players:call("get_Count")
-            for i = 0, playerLen - 1, 1 do
-                local playerCtx = players:call("get_Item", i)
-                local hp = playerCtx:call("get_HitPoint")
-                UI.NewRow(tostring(i) .. " HP: " .. 
-                    tostring(hp:call("get_CurrentHitPoint")) .. "/" .. 
-                    tostring(hp:call("get_DefaultHitPoint"))
-                )
-                if i == 0 then
-                    SetInvincible(playerCtx)
-                end
-            end
-        end
-
-        local player = GetPlayerManager()
-        if player ~= nil then
-            -- UI.NewRow("1P HP: " .. FloatColumn(player:call("get_WwisePlayerHPRatio_1P")))
-            -- UI.NewRow("2P HP: " .. FloatColumn(player:call("get_WwisePlayerHPRatio_2P")))
-            UI.NewRow("Player Distance: " .. FloatColumn(player:call("get_WwisePlayerDistance")))
-            UI.NewRow("")
-        end
-
-        local enemy = GetEnemyManager()
-        if enemy ~= nil then
-            -- UI.NewRow("EnemySpawnNumLimit: " .. tostring(enemy:get_field("EnemySpawnNumLimit")))
-
-            -- -- local list = enemy:call("get_LinkEnemyList") -- List<chainsaw.EnemeyHeadUpdater>
-
-            -- local combatEnemyDB = enemy:call("get_CombatEnemyDB") -- Dict<chainsaw.CharacterKindID, Hashset<UInt32>> -- guid? pointer?
-
-            -- local combatEnemy = enemy:get_field("_CombatEnemyCollection") -- Hashset<UInt32> -- GUID? pointer?
-
-            
-            -- local inCameraEnemy = enemy:call("get_CameraInsideEnemyContextRefs") -- chainsaw.EnemyBaseContext[]
-            -- chainsaw.EnemyBaseContext: GameRankAdd
-            -- chainsaw.CharacterContext: KindID, SpawnerID (type is ContextID?), IsRespawn, BreakPartsHitPointList, _HitPointVital
-            -- chainsaw.character.chxxxxx.WeakPointBackup
-            -- chainsaw.chxxxxxWeakPoint.Info
-            -- chainsaw.chxxxxxWeakPoint.DamageSetting
-        end
-	end
-)
-
 
