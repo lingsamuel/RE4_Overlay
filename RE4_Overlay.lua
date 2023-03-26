@@ -37,6 +37,12 @@ local draw = draw
 
 log.info("[RE4 Overlay] Loaded");
 
+local GameStatsManager = sdk.get_managed_singleton("chainsaw.GameStatsManager")
+local function GetGameStatsManager()
+    if GameStatsManager == nil then GameStatsManager = sdk.get_managed_singleton("chainsaw.GameStatsManager") end
+	return GameStatsManager
+end
+
 local InventoryManager = sdk.get_managed_singleton("chainsaw.InventoryManager")
 local function GetInventoryManager()
     if InventoryManager == nil then InventoryManager = sdk.get_managed_singleton("chainsaw.InventoryManager") end
@@ -615,22 +621,30 @@ end,
         if not Config.Enabled then return end
 
         local StatsUI = UI:new(nil, Config.StatsUI.PosX, Config.StatsUI.PosY, Config.StatsUI.RowHeight, Config.StatsUI.Width, initFont())
+        StatsUI:DrawBackground(20)
 
         if Config.TesterMode then
             for i = 1, #countTable, 1 do
                 StatsUI:NewRow("Count: " .. tostring(countTable[i]))
             end
         end
-        -- local posX = 1400
-        -- local posY = 200
-        -- local uiStep = 0
 
-        -- d2d.fill_rect(posX, posY, 240, 220, 0x69000000)
+        local stats = GetGameStatsManager()
+        if stats ~= nil then
+            local igtStr = tostring(stats:call("getCalculatingRecordTime()"))
+            local len = #tostring(igtStr)
+            local ms = tonumber(igtStr:sub(len - 5, len - 3))
+            local igtSecond = tonumber(igtStr:sub(1, len - 6))
+            -- StatsUI:NewRow("IGT: " .. tostring(igtStr))
+            StatsUI:NewRow("IGT: " .. os.date("!%H:%M:%S", igtSecond) .. "." .. tostring(ms))
+            -- StatsUI:NewRow("IGT: " .. tostring(stats:call("get_PlaythroughStatsInfo()"):call("outputUIFormat()")))
+            -- StatsUI:NewRow("IGT: " .. tostring(stats:call("get_CurrentCampaignStats()"))) -- nil??
+            -- StatsUI:NewRow("IGT: " .. tostring(stats:call("get_CurrentCampaignStats()"):call("get_Playthrough()"):call("outputUIFormat()")))
+        end
+
         local gameRank = GetGameRankSystem()
         -- local gameRank
         if Config.StatsUI.Enabled and gameRank ~= nil then
-            StatsUI:DrawBackground(17)
-
             StatsUI:NewRow("GameRank: " .. tostring(gameRank:get_field("_GameRank")))
             StatsUI:NewRow("ActionPoint: " .. FloatColumn(gameRank:get_field("_ActionPoint")))
             StatsUI:NewRow("ItemPoint: " .. FloatColumn(gameRank:get_field("_ItemPoint")))
