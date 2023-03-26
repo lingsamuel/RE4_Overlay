@@ -43,6 +43,12 @@ local function GetInventoryManager()
 	return InventoryManager
 end
 
+local DropItemManager = sdk.get_managed_singleton("chainsaw.DropItemManager")
+local function GetDropItemManager()
+    if DropItemManager == nil then DropItemManager = sdk.get_managed_singleton("chainsaw.DropItemManager") end
+	return DropItemManager
+end
+
 local GameRankSystem = sdk.get_managed_singleton("chainsaw.GameRankSystem")
 local function GetGameRankSystem()
     if GameRankSystem == nil then GameRankSystem = sdk.get_managed_singleton("chainsaw.GameRankSystem") end
@@ -59,6 +65,10 @@ local CharacterManager = sdk.get_managed_singleton("chainsaw.CharacterManager")
 local function GetCharacterManager()
     if CharacterManager == nil then CharacterManager = sdk.get_managed_singleton("chainsaw.CharacterManager") end
 	return CharacterManager
+end
+
+local function getMasterPlayer()
+    return GetCharacterManager():call("getPlayerContextRef")
 end
 
 local function GetEnemyList()
@@ -212,6 +222,70 @@ end
 local KindMap = GetEnumMap("chainsaw.CharacterKindID")
 local BodyPartsMap = GetEnumMap("chainsaw.character.BodyParts")
 local BodyPartsSideMap = GetEnumMap("chainsaw.character.BodyPartsSide")
+local ItemIDMap = GetEnumMap("chainsaw.ItemID")
+
+ItemIDMap[0x6B93100] = "Handgun Ammo"
+ItemIDMap[0x6B93D80] = "Shotgun Shells"
+ItemIDMap[0x6B94A00] = "Submachine Gun Ammo"
+ItemIDMap[0x6D19B00] = "Green Herb"
+ItemIDMap[0x6D19BA0] = "Unknown"
+ItemIDMap[0x6D1A140] = "Red Herb"
+ItemIDMap[0x6D1A1E0] = "Unknown"
+ItemIDMap[0x6D1A780] = "Yellow Herb"
+ItemIDMap[0x6D1ADC0] = "Mixed Herb (G+G)"
+ItemIDMap[0x6D1B400] = "Mixed Herb (G+G+G)"
+ItemIDMap[0x6D1BA40] = "Mixed Herb (G+R)"
+ItemIDMap[0x6D1C080] = "Mixed Herb (G+Y)"
+ItemIDMap[0x6D1C6C0] = "Mixed Herb (R+Y)"
+ItemIDMap[0x6D1CD00] = "Mixed Herb (G+R+Y)"
+ItemIDMap[0x6D1D340] = "Mixed Herb (G+G+Y)"
+ItemIDMap[0x6D1D980] = "First Aid Spray"
+ItemIDMap[0x7026F00] = "Gunpowder"
+ItemIDMap[0x7027540] = "Resources (L)"
+ItemIDMap[0x7027B80] = "Attachable Mines"
+ItemIDMap[0x70281C0] = "Broken Knife"
+ItemIDMap[0x7028800] = "Resources (S)"
+ItemIDMap[0x71C17C0] = "Hunter's Lodge Key"
+ItemIDMap[0x7641700] = "Pesetas"
+ItemIDMap[0x7668800] = "Case Upgrade (7x10)"
+ItemIDMap[0x7668E40] = "Case Upgrade (7x12)"
+ItemIDMap[0x7669480] = "Case Upgrade (8x12)"
+ItemIDMap[0x7669AC0] = "Case Upgrade (8x13)"
+ItemIDMap[0x766A100] = "Case Upgrade (9x13)"
+ItemIDMap[0x766C680] = "Attaché Case: Silver"
+ItemIDMap[0x768FF40] = "Recipe: Handgun Ammo"
+ItemIDMap[0x7690580] = "Recipe: Shotgun Shells"
+ItemIDMap[0x7690BC0] = "Recipe: Submachine Gun Ammo"
+ItemIDMap[0x7691200] = "Recipe: Rifle Ammo"
+ItemIDMap[0x7691840] = "Recipe: Magnum Ammo"
+ItemIDMap[0x7691E80] = "Recipe: Bolts"
+ItemIDMap[0x76924C0] = "Recipe: Bolts"
+ItemIDMap[0x7692B00] = "#Rejected#"
+ItemIDMap[0x7693140] = "Recipe: Attachable Mines"
+ItemIDMap[0x7693780] = "Recipe: Heavy Grenade"
+ItemIDMap[0x7693DC0] = "Recipe: Flash Grenade"
+ItemIDMap[0x7697C40] = "Recipe: Mixed Herb (G+G)"
+ItemIDMap[0x7698280] = "Recipe: Mixed Herb (G+R)"
+ItemIDMap[0x76988C0] = "Recipe: Mixed Herb (G+Y)"
+ItemIDMap[0x7698F00] = "Recipe: Mixed Herb (R+Y)"
+ItemIDMap[0x7699540] = "Recipe: Mixed Herb (G+G+G)"
+ItemIDMap[0x7699B80] = "Recipe: Mixed Herb (G+G+Y)"
+ItemIDMap[0x769A1C0] = "Recipe: Mixed Herb (G+G+Y)"
+ItemIDMap[0x769A800] = "Recipe: Mixed Herb (G+R+Y)"
+ItemIDMap[0x769AE40] = "Recipe: Mixed Herb (G+R+Y)"
+ItemIDMap[0x769B480] = "Recipe: Mixed Herb (G+R+Y)"
+ItemIDMap[0x1061A800] = "SG-09 R"
+ItemIDMap[0x10641900] = "W-870"
+ItemIDMap[0x10668A00] = "TMP"
+ItemIDMap[0x107A1200] = "Combat Knife"
+ItemIDMap[0x107A1E80] = "Kitchen Knife"
+ItemIDMap[0x1083D600] = "Hand Grenade"
+ItemIDMap[0x1083E280] = "Flash Grenade"
+ItemIDMap[0x1083E8C0] = "Chicken Egg"
+ItemIDMap[0x1083EF00] = "Brown Chicken Egg"
+
+
+local DropTypeMap = GetEnumMap("chainsaw.RandomDrop.DropType")
 
 local function SetInvincible(playerBaseContext)
     -- TODO: Should check id?
@@ -234,6 +308,11 @@ local function SetInvincible(playerBaseContext)
         -- hp:call("set_NoDeath", false)
         -- hp:call("set_Immortal", false)
     end
+
+    -- invisible attempt, but failed
+    -- playerBaseContext:call("updateSafeRoomInfo", true) -- not working
+    -- playerBaseContext:set_field("<State>k__BackingField", 2305843009213693952) -- in safe room
+    -- playerBaseContext:set_field("<StateOld>k__BackingField", 2305843009213693952) -- in safe room
 end
 
 -- ==== Hooks ====
@@ -251,8 +330,34 @@ local TypedefEnemyAttackPermitManager = sdk.find_type_definition("chainsaw.Enemy
 -- sdk.hook(sdk.find_type_definition("chainsaw.EnemyBehaviorTreeCondition_Base"):get_method("evaluate(via.behaviortree.ConditionArg)"),
 -- function (args)
 -- end, function(ret)
---     -- FIXME: this will affect Player?? and causes CTD
+--     -- FIXME: this will affect Player and causes CTD
 --     -- return RETVAL_FALSE
+--     return ret
+-- end)
+
+-- sdk.hook(sdk.find_type_definition("chainsaw.PlayerBaseContext"):get_method("updateSafeRoomInfo(System.Boolean)"),
+-- function (args)
+-- end, function(ret)
+--     -- return RETVAL_FALSE
+--     return ret
+-- end)
+
+-- DropItemInfo
+
+-- DropItemRandomTable
+
+-- sdk.hook(sdk.find_type_definition("chainsaw.EnemyBehaviorTreeCondition_CheckFindState"):get_method("get_FindState()"),
+-- function (args)
+-- end, function(ret)
+--     -- return RETVAL_FALSE
+--     -- sdk.call_native_func(ret, sdk.find_type_definition("System.Collections.Generic.HashSet`1<System.UInt32>"), "Clear")
+--     return 0
+-- end)
+-- sdk.hook(sdk.find_type_definition("chainsaw.EnemyBaseContext"):get_method("get_Actions()"),
+-- function (args)
+-- end, function(ret)
+--     -- return RETVAL_FALSE
+--     -- sdk.call_native_func(ret, sdk.find_type_definition("System.Collections.Generic.HashSet`1<System.UInt32>"), "Clear")
 --     return ret
 -- end)
 
@@ -312,21 +417,34 @@ end, function(ret)
 end)
 
 -- local DisableAttack = true
--- sdk.hook(TypedefEnemyAttackPermitManager:get_method("checkAttackPermit(chainsaw.CharacterContext, chainsaw.CharacterContext)"),
--- function (args)
---     -- if Config.CheatConfig.UnlimitItemAndDurability then
---     --     return sdk.PreHookResult.SKIP_ORIGINAL
---     -- end
--- end, function (retval)
---     if not Config.CheatConfig.DisableEnemyAttackCheck then return end
---     if DisableAttack then
---         -- FIXME: this only affect melee enemy? strange
---         sdk.to_managed_object(retval):call("set_Has", false)
---     end
--- 	return retval
--- end)
+sdk.hook(TypedefEnemyAttackPermitManager:get_method("checkAttackPermit(chainsaw.CharacterContext, chainsaw.CharacterContext)"),
+function (args)
+    -- if Config.CheatConfig.UnlimitItemAndDurability then
+    --     return sdk.PreHookResult.SKIP_ORIGINAL
+    -- end
+end, function (retval)
+    if not Config.CheatConfig.DisableEnemyAttackCheck then
+        return retval
+    end
+    -- FIXME: this only affect melee enemy? strange
+    sdk.to_managed_object(retval):call("set_Has", false)
+	return retval
+end)
 
 local countTable = {}
+
+local lastHoverItemID
+sdk.hook(sdk.find_type_definition("chainsaw.gui.inventory.CsInventory"):get_method("getItem(chainsaw.InventorySlotType, chainsaw.CsSlotIndex)"),
+function (args)
+end, function (retval)
+    if retval == nil or sdk.to_managed_object(retval) == nil then
+    else
+        lastHoverItemID = sdk.to_managed_object(retval):call("get_ItemId")
+    end
+	return retval
+end)
+
+local lastUseItemID
 sdk.hook(TypedefItem:get_method("reduceCount(System.Int32)"),
 function (args)
     local finalCount = sdk.to_int64(args[3]) & 0xFFFFFFFF
@@ -338,6 +456,7 @@ function (args)
         return
     end
 
+    lastUseItemID = this:get_field("_ItemId")
     if Config.TesterMode then
         table.insert(countTable, tostring(currentCount) .. " -> " .. tostring(finalCount) .. "/ItemID: " .. tostring(this:get_field("_ItemId")))
     end
@@ -355,8 +474,12 @@ function (args)
 end, function (retval)
 	return retval
 end)
+
+local lastShootAmmoItemID
 sdk.hook(TypedefWeaponItem:get_method("reduceAmmoCount(System.Int32)"),
 function (args)
+    local this = sdk.to_managed_object(args[2])
+    lastShootAmmoItemID = this:call("get_CurrentAmmo()")
     if Config.CheatConfig.UnlimitItemAndDurability then
         return sdk.PreHookResult.SKIP_ORIGINAL
     end
@@ -560,12 +683,120 @@ end,
             end
         end
 
+        if masterPlayer ~= nil then
+            StatsUI:NewRow("HateRate: " .. FloatColumn(masterPlayer:call("get_HateRate", nil)))
+        end
+
         local player = GetPlayerManager()
         if Config.StatsUI.Enabled and player ~= nil then
             -- StatsUI:NewRow("1P HP: " .. FloatColumn(player:call("get_WwisePlayerHPRatio_1P")))
             -- StatsUI:NewRow("2P HP: " .. FloatColumn(player:call("get_WwisePlayerHPRatio_2P")))
             StatsUI:NewRow("Player Distance: " .. FloatColumn(player:call("get_WwisePlayerDistance")))
             StatsUI:NewRow("")
+        end
+
+        if Config.TesterMode then
+            if lastHoverItemID ~= nil then
+                StatsUI:NewRow("lastHoverItemID: " .. ItemIDMap[lastHoverItemID] .. "/" .. tostring(lastHoverItemID))
+            end
+            if lastUseItemID ~= nil then
+                StatsUI:NewRow("LastUseItemID: " .. ItemIDMap[lastUseItemID] .. "/" .. tostring(lastUseItemID))
+            end
+            if lastShootAmmoItemID ~= nil then
+                StatsUI:NewRow("LastShootAmmoItemID: " .. ItemIDMap[lastShootAmmoItemID] .. "/" .. tostring(lastShootAmmoItemID))
+            end
+
+            local drop = GetDropItemManager()
+            if drop ~= nil then
+                StatsUI:NewRow("-- Drop Manager --")
+                local DistRandomItem = drop:get_field("DistRandomItem") -- float
+                StatsUI:NewRow("DistRandomItem: " .. FloatColumn(DistRandomItem))
+
+                local stacks = drop:get_field("_RandomDropStack") -- List<RandomDropStack>
+                StatsUI:NewRow("== _RandomDropStack (" .. tostring(stacks:call("get_Count")) .. ") ==")
+                local stackLen = stacks:call("get_Count")
+                for i = 0, stackLen - 1, 1 do
+                    local stack = stacks:call("get_Item", i)
+                    StatsUI:NewRow("DropType: " .. DropTypeMap[stack:get_field("DropType")])
+                    -- StatsUI:NewRow(ItemIDMap[stack:get_field("ID")] .. ": " .. tostring(stack:get_field("Rate")))
+                end
+
+                local collectedDropItem = drop:call("collectDropItem()") -- DropItemContext[]
+                StatsUI:NewRow("== collectedDropItem (" .. tostring(collectedDropItem:call("get_Count")) .. ") ==")
+                -- local collectedDropItemLen = collectedDropItem:call("get_Count")
+                -- for i = 0, collectedDropItemLen - 1, 1 do
+                --     local dropItemCtx = collectedDropItem:call("get_Item", i)
+                --     StatsUI:NewRow(ItemIDMap[dropItemCtx:call("getItemID")])
+                -- end
+
+
+                local dropItemDict = drop:get_field("_DropItem") -- Dict<int, DropItem>
+                StatsUI:NewRow("== _DropItem (" .. tostring(dropItemDict:call("get_Count")) .. ") ==")
+                local dropItemEntries = dropItemDict:get_field('_entries')
+                for _, k in pairs(dropItemEntries) do
+                    local id = k:get_field('key')
+                    local dropItem = k:get_field('value')
+                    if dropItem ~= nil then
+                        StatsUI:NewRow( tostring(id) .. ": " .. ItemIDMap[dropItem:call("getItemID")] .. " / " .. tostring(dropItem:call("getCount")))
+                    end
+                end
+
+
+                local LostItem = drop:get_field("_LostItem") -- Dict<int, DropItem>
+                local LostItemCount = drop:get_field("_LostItemCount") -- Dict<int, int>
+
+                local limitCount = drop:get_field("_LimitCount") -- List<List<int>>
+                StatsUI:NewRow("== LimitCount (" .. tostring(limitCount:call("get_Count")) .. ") ==")
+                local limitCountLen = limitCount:call("get_Count")
+                for i = 0, limitCountLen - 1, 1 do
+                    local limits = limitCount:call("get_Item", i)
+
+                    local limitsStr = ""
+                    local limitsLen = limits:call("get_Count")
+                    for j = 0, limitsLen - 1, 1 do
+                        local limit = limits:call("get_Item", j)
+                        limitsStr = limitsStr .. tostring(limit) .. ","
+                    end
+                    StatsUI:NewRow("_LimitCount: " .. (limitsStr))
+                end
+
+
+                local _LoadCount = drop:get_field("_LoadCount") -- int
+                StatsUI:NewRow("_LoadCount: " .. FloatColumn(_LoadCount))
+
+                StatsUI:NewRow("")
+                local randomTable = drop:get_field("_DropTable") -- RandomDrop
+                StatsUI:NewRow("== Drop Table ==")
+                local _PointRate = randomTable:get_field("_PointRate") -- PointRate[]
+                local _CustomTypeData = randomTable:get_field("_CustomTypeData") -- CustomTypeData[]
+                local _HitPointRate = randomTable:get_field("_HitPointRate") -- int
+                local _DroppedCountRange = randomTable:get_field("_DroppedCountRange") -- float
+
+                StatsUI:NewRow("_HitPointRate: " .. FloatColumn(_HitPointRate))
+                StatsUI:NewRow("_DroppedCountRange: " .. FloatColumn(_DroppedCountRange))
+
+                StatsUI:NewRow("== _PointRate (" .. tostring(_PointRate:call("get_Count")) .. ") ==")
+                local pointRateLen = _PointRate:call("get_Count")
+                for i = 0, pointRateLen - 1, 1 do
+                    local PointRate = _PointRate:call("get_Item", i)
+                    StatsUI:NewRow(ItemIDMap[PointRate:get_field("ID")] .. ": " .. tostring(PointRate:get_field("Rate")))
+                end
+
+                local customTypeDataLen = _CustomTypeData:call("get_Count")
+                for i = 0, customTypeDataLen - 1, 1 do
+                    local customTypeData = _CustomTypeData:call("get_Item", i)
+                    local idsStr = ""
+                    local IDs = customTypeData:get_field("IDs")
+                    local idsLen = IDs:call("get_Count")
+                    for j = 0, idsLen - 1, 1 do
+                        local id = IDs:call("get_Item", j)
+                        idsStr = idsStr .. tostring(ItemIDMap[id]) .. ", "
+                    end
+
+                    StatsUI:NewRow(tostring(i) .. ": " .. tostring(idsStr))
+                end
+
+            end
         end
 
         local enemy = GetEnemyManager()
@@ -663,7 +894,9 @@ end,
                             local floatingY = screenPos.y + Config.FloatingUI.ScreenPosOffsetY
                             if Config.FloatingUI.DisplayNumber then
                                 local hpMsg = "HP: " .. tostring(currentHP) .. "/" .. tostring(maxHP)
-                                -- hpMsg = hpMsg .. " / " .. tostring(enemyCtx:call("get_ItemDropCount"))
+                                if Config.TesterMode then
+                                    hpMsg = hpMsg .. " / " .. tostring(enemyCtx:call("get_ItemDropCount"))
+                                end
                                 d2d.text(initFont(Config.FloatingUI.FontSize), hpMsg, floatingX, floatingY - 24, 0xFFFFFFFF)
                             end
                             d2d.fill_rect(floatingX - 1, floatingY - 1, width + 2, height + 2, 0xFF000000)
@@ -811,8 +1044,8 @@ re.on_draw_ui(function()
                 end
 			end
 
-            -- changed, Config.CheatConfig.DisableEnemyAttackCheck = imgui.checkbox("Disable Enemy Attack Check (doesn't work for ranged enemy)", Config.CheatConfig.DisableEnemyAttackCheck)
-            -- configChanged = configChanged or changed
+            changed, Config.CheatConfig.DisableEnemyAttackCheck = imgui.checkbox("Disable Enemy Attack Check (doesn't work for ranged enemy)", Config.CheatConfig.DisableEnemyAttackCheck)
+            configChanged = configChanged or changed
             changed, Config.CheatConfig.SkipCG = imgui.checkbox("Skip CG", Config.CheatConfig.SkipCG)
             configChanged = configChanged or changed
             changed, Config.CheatConfig.SkipRadio = imgui.checkbox("Skip Radio", Config.CheatConfig.SkipRadio)
