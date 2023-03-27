@@ -54,8 +54,14 @@ local fontCN = imgui.load_font(CN_FONT_NAME, CN_FONT_SIZE, CJK_GLYPH_RANGES)
 
 local SaveDataManager = sdk.get_managed_singleton("share.SaveDataManager")
 local function GetSaveDataManager()
-    if SaveDataManager == nil then SaveDataManager = sdk.get_managed_singleton("chainsaw.SaveDataManager") end
+    if SaveDataManager == nil then SaveDataManager = sdk.get_managed_singleton("share.SaveDataManager") end
 	return SaveDataManager
+end
+
+local TimerManager = sdk.get_managed_singleton("chainsaw.TimerManager")
+local function GetTimerManager()
+    if TimerManager == nil then TimerManager = sdk.get_managed_singleton("chainsaw.TimerManager") end
+	return TimerManager
 end
 
 local CharmManager = sdk.get_managed_singleton("chainsaw.CharmManager")
@@ -444,6 +450,26 @@ if Config.TesterMode then
     end)
 end
 
+
+local lastSaveArg
+sdk.hook(sdk.find_type_definition("share.SaveDataManager"):get_method("requestStartSaveGameDataFlow(System.Int32, share.GameSaveRequestArgs)"),
+function (args)
+    lastSaveArg = sdk.to_managed_object(args[4])
+end, function(ret)
+    return ret
+end)
+
+local lastSavePoint
+
+if Config.TesterMode then
+    sdk.hook(sdk.find_type_definition("chainsaw.GmSavePoint"):get_method("openSaveLoad"),
+    function (args)
+        lastSavePoint = sdk.to_managed_object(args[2])
+    end, function(ret)
+        return ret
+    end)
+end
+
 -- sdk.hook(sdk.find_type_definition("chainsaw.EnemyBehaviorTreeCondition_Base"):get_method("evaluate(via.behaviortree.ConditionArg)"),
 -- function (args)
 -- end, function(ret)
@@ -732,12 +758,16 @@ end,
         if not Config.Enabled then return end
 
         local StatsUI = UI:new(nil, Config.StatsUI.PosX, Config.StatsUI.PosY, Config.StatsUI.RowHeight, Config.StatsUI.Width, initFont())
-        StatsUI:DrawBackground(20)
+        StatsUI:DrawBackground(25)
 
         if Config.TesterMode then
             for i = 1, #countTable, 1 do
                 StatsUI:NewRow("Count: " .. tostring(countTable[i]))
             end
+        end
+
+        if Config.TesterMode and lastSaveArg ~= nil then
+            StatsUI:NewRow("lastSaveArg" .. tostring(lastSaveArg))
         end
 
         if Config.CheatConfig.PredictCharm then
@@ -794,6 +824,16 @@ end,
             local igtSecond = tonumber(igtStr:sub(1, len - 6))
             -- StatsUI:NewRow("IGT: " .. tostring(igtStr))
             StatsUI:NewRow("IGT: " .. os.date("!%H:%M:%S", igtSecond) .. "." .. tostring(ms))
+
+            if Config.TesterMode then
+                local timer = GetTimerManager()
+                if timer ~= nil then
+                    StatsUI:NewRow("isOpenTimerStopGui: " .. tostring(timer:call("isOpenTimerStopGui()")))
+                    StatsUI:NewRow("_IsTypeWriterPause: " .. tostring(timer:get_field("_IsTypeWriterPause")))
+                    StatsUI:NewRow("CurrentSecond: " .. tostring(timer:call("get_CurrentSecond()")))
+                    StatsUI:NewRow("OldActualPlayingTime: " .. tostring(timer:get_field("_OldActualPlayingTime")))
+                end
+            end
             -- StatsUI:NewRow("IGT: " .. tostring(stats:call("get_PlaythroughStatsInfo()"):call("outputUIFormat()")))
             -- StatsUI:NewRow("IGT: " .. tostring(stats:call("get_CurrentCampaignStats()"))) -- nil??
             -- StatsUI:NewRow("IGT: " .. tostring(stats:call("get_CurrentCampaignStats()"):call("get_Playthrough()"):call("outputUIFormat()")))
@@ -805,9 +845,9 @@ end,
             StatsUI:NewRow("GameRank: " .. tostring(gameRank:get_field("_GameRank")))
             StatsUI:NewRow("ActionPoint: " .. FloatColumn(gameRank:get_field("_ActionPoint")))
             StatsUI:NewRow("ItemPoint: " .. FloatColumn(gameRank:get_field("_ItemPoint")))
-            -- StatsUI:NewRow("BackupActionPoint: " .. FloatColumn(gameRank:get_field("BackupActionPoint")))
-            -- StatsUI:NewRow("BackupItemPoint: " .. FloatColumn(gameRank:get_field("BackupItemPoint")))
-            -- StatsUI:NewRow("FixItemPoint: " .. FloatColumn(gameRank:get_field("FixItemPoint")))
+            StatsUI:NewRow("BackupActionPoint: " .. FloatColumn(gameRank:get_field("BackupActionPoint")))
+            StatsUI:NewRow("BackupItemPoint: " .. FloatColumn(gameRank:get_field("BackupItemPoint")))
+            StatsUI:NewRow("FixItemPoint: " .. FloatColumn(gameRank:get_field("FixItemPoint")))
             StatsUI:NewRow("RetryCount: " .. tostring(gameRank:call("get_RankPointPlRetryCount")))
             StatsUI:NewRow("KillCount: " .. tostring(gameRank:call("get_RankPointKillCount")))
 
@@ -1144,10 +1184,10 @@ end,
 
                         -- WeakPointData? WeakPointUnit?
 
-                        if kind == "ch1_d6z0" then
-                            -- chainsaw.Ch1d6z0Context
-                            EnemyUI:NewRow(" WeakPointType: " .. tostring(enemyCtx:call("get_WeakPointType")))
-                        end
+                        -- if kind == "ch1_d6z0" then
+                        --     -- chainsaw.Ch1d6z0Context
+                        --     EnemyUI:NewRow(" WeakPointType: " .. tostring(enemyCtx:call("get_WeakPointType")))
+                        -- end
                     end
                 end
             end
@@ -1317,7 +1357,26 @@ re.on_draw_ui(function()
 		end
 
         local saveMgr = GetSaveDataManager()
-        if saveMgr ~= nil and imgui.tree_node("Save Management (Danger & WIP)") then
+        if saveMgr ~= nil and imgui.tree_node("Save Management (!!!Danger!!! Backup your saves!!!)") then
+            if Config.TesterMode then
+                if imgui.button("Open SavePoint [TESTER MODE]") then
+                    if lastSavePoint ~= nil then
+                        lastSavePoint:call("openSaveLoad")
+                    end
+                end
+            end
+            imgui.text_colored("I don't guarantee this feature to be safe. Use it at your own risk.", 0xFF0000FF)
+            if lastSaveArg ~= nil then
+                imgui.text("-------------------------------------------------------------------")
+                imgui.text("---------- Save management feature enabled --------")
+                imgui.text("-------------------------------------------------------------------")
+            else
+                imgui.text("-------------------------------------------------------------------------------------------")
+                imgui.text_colored("---------- You need to save at least once to enable this feature --------", 0xFF0000FF)
+                imgui.text("-------------------------------------------------------------------------------------------")
+            end
+
+
             imgui.push_font(fontCN)
             local allSlotIDs = saveMgr:call("getAllSaveSlotNo()")
             local slotsLen = allSlotIDs:call("get_Count")
@@ -1334,6 +1393,8 @@ re.on_draw_ui(function()
                 local save = saveDetailList:call("get_Item", i):call("get_SaveFileDetail()")
 
                 imgui.text("----- Slot " .. tostring(i) .. " -----")
+
+                imgui.text("DataCrashed?: " .. tostring(save:call("get_DataCrashed()")))
                 imgui.text(tostring(save:call("get_Slot")) .. ": " .. tostring(save:call("get_SubTitle()")) .. " | " .. tostring(save:call("get_Detail()")))
 
                 local timestampStr = tostring(save:call("get_LastUpdateTimeStamp"))
@@ -1343,8 +1404,10 @@ re.on_draw_ui(function()
                 imgui.text("Clicks " .. tostring(clicks))
                 if imgui.button("Save at slot " .. tostring(i)) then
                     clicks = clicks + 1
-                    save:call("get_IsBusy()")
-                    save:call("requestStartSaveGameDataFlow", i , nil)
+                    if lastSaveArg ~= nil then
+                        saveMgr:call("get_IsBusy()")
+                        saveMgr:call("requestStartSaveGameDataFlow", i , lastSaveArg)
+                    end
                 end
             end
 
