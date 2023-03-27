@@ -430,6 +430,7 @@ local lastLotterySeed
 local lastLotteryCount
 local lastCharmItemIDs
 local lastGotChartmID
+local lastRankPointKillCount
 if Config.TesterMode then
     sdk.hook(sdk.find_type_definition("chainsaw.CharmManager"):get_method("drawingCharmGacha(System.Int32)"),
     function (args)
@@ -448,8 +449,14 @@ if Config.TesterMode then
         lastGotChartmID = sdk.to_int64(ret)
         return ret
     end)
-end
 
+    sdk.hook(sdk.find_type_definition("chainsaw.GameRankSystem"):get_method("set_RankPointKillCount(System.Int32)"),
+    function (args)
+        lastRankPointKillCount = sdk.to_int64(args[3])
+    end, function(ret)
+        return ret
+    end)
+end
 
 local lastSaveArg
 sdk.hook(sdk.find_type_definition("share.SaveDataManager"):get_method("requestStartSaveGameDataFlow(System.Int32, share.GameSaveRequestArgs)"),
@@ -849,7 +856,13 @@ end,
             StatsUI:NewRow("BackupItemPoint: " .. FloatColumn(gameRank:get_field("BackupItemPoint")))
             StatsUI:NewRow("FixItemPoint: " .. FloatColumn(gameRank:get_field("FixItemPoint")))
             StatsUI:NewRow("RetryCount: " .. tostring(gameRank:call("get_RankPointPlRetryCount")))
-            StatsUI:NewRow("KillCount: " .. tostring(gameRank:call("get_RankPointKillCount")))
+
+            if stats ~= nil then
+                StatsUI:NewRow("KillCount: " .. tostring(stats:call("getKillCount")))
+            end
+            if Config.TesterMode then
+                StatsUI:NewRow("lastRankPointKillCount: " .. tostring(lastRankPointKillCount))
+            end
 
             StatsUI:NewRow("")
             StatsUI:NewRow("PlayerDamageRate: " .. FloatColumn(gameRank:call("getRankPlayerDamageRate", nil)))
