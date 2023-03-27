@@ -37,6 +37,33 @@ local draw = draw
 
 log.info("[RE4 Overlay] Loaded");
 
+local CN_FONT_NAME = 'NotoSansSC-Bold.otf'
+local CN_FONT_SIZE = 18
+local CJK_GLYPH_RANGES = {
+    0x0020, 0x00FF, -- Basic Latin + Latin Supplement
+    0x2000, 0x206F, -- General Punctuation
+    0x3000, 0x30FF, -- CJK Symbols and Punctuations, Hiragana, Katakana
+    0x31F0, 0x31FF, -- Katakana Phonetic Extensions
+    0xFF00, 0xFFEF, -- Half-width characters
+    0x4e00, 0x9FAF, -- CJK Ideograms
+    0,
+}
+
+local fontCN = imgui.load_font(CN_FONT_NAME, CN_FONT_SIZE, CJK_GLYPH_RANGES)
+
+
+local SaveDataManager = sdk.get_managed_singleton("share.SaveDataManager")
+local function GetSaveDataManager()
+    if SaveDataManager == nil then SaveDataManager = sdk.get_managed_singleton("chainsaw.SaveDataManager") end
+	return SaveDataManager
+end
+
+local CharmManager = sdk.get_managed_singleton("chainsaw.CharmManager")
+local function GetCharmManager()
+    if CharmManager == nil then CharmManager = sdk.get_managed_singleton("chainsaw.CharmManager") end
+	return CharmManager
+end
+
 local GameStatsManager = sdk.get_managed_singleton("chainsaw.GameStatsManager")
 local function GetGameStatsManager()
     if GameStatsManager == nil then GameStatsManager = sdk.get_managed_singleton("chainsaw.GameStatsManager") end
@@ -97,12 +124,17 @@ end
 
 -- ==== Config ====
 
+local Languages = {"EN", "CN"}
+
 local Config = json.load_file("RE4_Overlay/RE4_Overlay.json") or {}
 if Config.Enabled == nil then
     Config.Enabled = true
 end
 if Config.FontSize == nil then
     Config.FontSize = 24
+end
+if Config.Language == nil then
+    Config.Language = "EN"
 end
 
 if Config.StatsUI == nil then
@@ -192,6 +224,9 @@ end
 if Config.CheatConfig.DisableEnemyAttackCheck == nil then
     Config.CheatConfig.DisableEnemyAttackCheck = false
 end
+if Config.CheatConfig.PredictCharm == nil then
+    Config.CheatConfig.PredictCharm = false
+end
 
 if Config.DebugMode == nil then
 	Config.DebugMode = false
@@ -206,6 +241,16 @@ if Config.DangerMode == nil then
 end
 
 -- ==== Utils ====
+
+local function FindIndex(table, value)
+	for i = 1, #table do
+		if table[i] == value then
+			return i;
+		end
+	end
+
+	return nil;
+end
 
 local function GetEnumMap(enumTypeName)
 	local t = sdk.find_type_definition(enumTypeName)
@@ -290,6 +335,47 @@ ItemIDMap[0x1083E280] = "Flash Grenade"
 ItemIDMap[0x1083E8C0] = "Chicken Egg"
 ItemIDMap[0x1083EF00] = "Brown Chicken Egg"
 
+ItemIDMap[127200000] = { CN = "荷塞先生", EN = "Don Jose",}
+ItemIDMap[127201600] = { CN = "迭戈先生", EN = "Don Diego",}
+ItemIDMap[127203200] = { CN = "埃斯特万先生", EN = "Don Esteban",}
+ItemIDMap[127204800] = { CN = "曼努埃尔先生", EN = "Don Manuel",}
+ItemIDMap[127206400] = { CN = "伊莎贝尔女士", EN = "Isabel",}
+ItemIDMap[127208000] = { CN = "玛丽亚女士", EN = "Maria",}
+ItemIDMap[127209600] = { CN = "萨尔瓦多医生", EN = "Dr. Salvador",}
+ItemIDMap[127211200] = { CN = "贝拉姐妹", EN = "Bella Sisters",}
+ItemIDMap[127212800] = { CN = "佩德罗先生", EN = "Don Pedro",}
+ItemIDMap[127214400] = { CN = "邪教徒·巨镰", EN = "Zealot w/ scythe",}
+ItemIDMap[127216000] = { CN = "邪教徒·盾牌", EN = "Zealot w/ shield",}
+ItemIDMap[127217600] = { CN = "邪教徒·十字弩", EN = "Zealot w/ bowgun",}
+ItemIDMap[127219200] = { CN = "邪教徒·引导者", EN = "Leader zealot",}
+ItemIDMap[127220800] = { CN = "士兵·炸药", EN = "Soldier w/ dynamite",}
+ItemIDMap[127222400] = { CN = "士兵·电棍", EN = "Soldier w/ stun-rod",}
+ItemIDMap[127224000] = { CN = "士兵·铁锤", EN = "Soldier w/ hammer",}
+ItemIDMap[127225600] = { CN = "J.J.", EN = "J.J.",}
+ItemIDMap[127227200] = { CN = "里昂·手枪", EN = "Leon w/ handgun",}
+ItemIDMap[127228800] = { CN = "里昂·霰弹枪", EN = "Leon w/ shotgun",}
+ItemIDMap[127230400] = { CN = "里昂·RPG", EN = "Leon w/ rocket launcher",}
+ItemIDMap[127232000] = { CN = "商人", EN = "Merchant",}
+ItemIDMap[127233600] = { CN = "阿什莉·格拉汉姆", EN = "Ashley Graham",}
+ItemIDMap[127235200] = { CN = "路易斯·塞拉", EN = "Luis Sera",}
+ItemIDMap[127236800] = { CN = "艾达·王", EN = "Ada Wong",}
+ItemIDMap[127238400] = { CN = "鸡", EN = "Chicken",}
+ItemIDMap[127240000] = { CN = "黑鲈鱼", EN = "Black Bass",}
+ItemIDMap[127241600] = { CN = "独角仙", EN = "Rhinoceros Beetle",}
+ItemIDMap[127243200] = { CN = "光明教徽", EN = "Iluminados Emblem",}
+ItemIDMap[127244800] = { CN = "打击者", EN = "Striker",}
+ItemIDMap[127246400] = { CN = "可爱熊", EN = "Cute Bear",}
+
+local function GetItemName(id)
+    local name = ItemIDMap[id]
+    if Config.Language == "CN" and name.CN then
+        return name.CN
+    end
+    if name.EN then
+        return name.EN
+    end
+    return name
+end
 
 local DropTypeMap = GetEnumMap("chainsaw.RandomDrop.DropType")
 
@@ -332,6 +418,31 @@ local TypedefInventoryControllerBase = sdk.find_type_definition("chainsaw.Invent
 local TypedefItem = sdk.find_type_definition("chainsaw.Item")
 local TypedefWeaponItem = sdk.find_type_definition("chainsaw.WeaponItem")
 local TypedefEnemyAttackPermitManager = sdk.find_type_definition("chainsaw.EnemyAttackPermitManager")
+
+local lastTableNo
+local lastLotterySeed
+local lastLotteryCount
+local lastCharmItemIDs
+local lastGotChartmID
+if Config.TesterMode then
+    sdk.hook(sdk.find_type_definition("chainsaw.CharmManager"):get_method("drawingCharmGacha(System.Int32)"),
+    function (args)
+        lastTableNo = sdk.to_int64(args[3])
+    end, function(ret)
+        return ret
+    end)
+
+    sdk.hook(sdk.find_type_definition("chainsaw.CharmManager"):get_method("getCharmGachaItemId(chainsaw.CharmManager.LotteryTableData, System.Collections.Generic.List`1<chainsaw.ItemID>)"),
+    function (args)
+        local lotteryTable = sdk.to_managed_object(args[3])
+        lastLotterySeed = lotteryTable:get_field("_Seed")
+        lastLotteryCount = lotteryTable:get_field("_CurrnetCount")
+        lastCharmItemIDs = sdk.to_managed_object(args[4])
+    end, function(ret)
+        lastGotChartmID = sdk.to_int64(ret)
+        return ret
+    end)
+end
 
 -- sdk.hook(sdk.find_type_definition("chainsaw.EnemyBehaviorTreeCondition_Base"):get_method("evaluate(via.behaviortree.ConditionArg)"),
 -- function (args)
@@ -629,6 +740,52 @@ end,
             end
         end
 
+        if Config.CheatConfig.PredictCharm then
+            local charm = GetCharmManager()
+            if charm ~= nil then
+                local lotteryTables = charm:get_field("_LotteryTable")
+                if lotteryTables ~= nil then
+                    StatsUI:NewRow("--- Charm Manager ---")
+
+                    local len = lotteryTables:call("get_Count")
+                    for i = 0, len - 1, 1 do
+                        local table = lotteryTables:call("get_Item", i)
+                        StatsUI:NewRow("Gold Token " .. tostring(i) .. " : ")
+                        StatsUI:NewRow(" Seed: " .. tostring(table:get_field("_Seed")))
+                        StatsUI:NewRow(" CurrentCount: " .. tostring(table:get_field("_CurrnetCount")))
+
+                        local lastCount = charm:get_field("_LotteryTable"):call("get_Item", i):get_field("_CurrnetCount")
+                        local gacha = charm:call("drawingCharmGacha", i)
+                        charm:get_field("_LotteryTable"):call("get_Item", i):set_field("_CurrnetCount", lastCount)
+                        StatsUI:NewRow("Next Gacha: " .. tostring(gacha) .. ": " .. tostring(GetItemName(gacha)))
+                        StatsUI:NewRow("")
+                    end
+                    StatsUI:NewRow("------")
+                else
+                    StatsUI:NewRow("CharmManager: LotteryTable is nil")
+                end
+            else
+                StatsUI:NewRow("CharmManager is nil")
+            end
+        end
+
+        if Config.TesterMode then
+            StatsUI:NewRow("lastTableNo: " .. tostring(lastTableNo))
+            StatsUI:NewRow("LotterySeed: " .. tostring(lastLotterySeed))
+            StatsUI:NewRow("LotteryCount: " .. tostring(lastLotteryCount))
+
+            -- if lastCharmItemIDs ~= nil then
+            -- -- FIXME: This is unstable, why?
+            --     StatsUI:NewRow("Lottery Item IDs: ")
+            --     local len = lastCharmItemIDs:call("get_Count")
+            --     for i = 0, len - 1, 1 do
+            --         local itemID = lastCharmItemIDs:call("get_Item", i)
+            --         StatsUI:NewRow(tostring(itemID) .. ": " .. tostring(ItemIDMap[itemID]))
+            --     end
+            -- end
+            StatsUI:NewRow("Last Gacha Item ID: " .. tostring(lastGotChartmID) .. ": " .. tostring(GetItemName(lastGotChartmID)))
+        end
+
         local stats = GetGameStatsManager()
         if stats ~= nil then
             local igtStr = tostring(stats:call("getCalculatingRecordTime()"))
@@ -711,13 +868,13 @@ end,
 
         if Config.TesterMode then
             if lastHoverItemID ~= nil then
-                StatsUI:NewRow("lastHoverItemID: " .. ItemIDMap[lastHoverItemID] .. "/" .. tostring(lastHoverItemID))
+                StatsUI:NewRow("lastHoverItemID: " .. GetItemName(lastHoverItemID) .. "/" .. tostring(lastHoverItemID))
             end
             if lastUseItemID ~= nil then
-                StatsUI:NewRow("LastUseItemID: " .. ItemIDMap[lastUseItemID] .. "/" .. tostring(lastUseItemID))
+                StatsUI:NewRow("LastUseItemID: " .. GetItemName(lastUseItemID) .. "/" .. tostring(lastUseItemID))
             end
             if lastShootAmmoItemID ~= nil then
-                StatsUI:NewRow("LastShootAmmoItemID: " .. ItemIDMap[lastShootAmmoItemID] .. "/" .. tostring(lastShootAmmoItemID))
+                StatsUI:NewRow("LastShootAmmoItemID: " .. GetItemName(lastShootAmmoItemID) .. "/" .. tostring(lastShootAmmoItemID))
             end
 
             local drop = GetDropItemManager()
@@ -751,7 +908,7 @@ end,
                     local id = k:get_field('key')
                     local dropItem = k:get_field('value')
                     if dropItem ~= nil then
-                        StatsUI:NewRow( tostring(id) .. ": " .. ItemIDMap[dropItem:call("getItemID")] .. " / " .. tostring(dropItem:call("getCount")))
+                        StatsUI:NewRow( tostring(id) .. ": " .. GetItemName(dropItem:call("getItemID")) .. " / " .. tostring(dropItem:call("getCount")))
                     end
                 end
 
@@ -793,7 +950,7 @@ end,
                 local pointRateLen = _PointRate:call("get_Count")
                 for i = 0, pointRateLen - 1, 1 do
                     local PointRate = _PointRate:call("get_Item", i)
-                    StatsUI:NewRow(ItemIDMap[PointRate:get_field("ID")] .. ": " .. tostring(PointRate:get_field("Rate")))
+                    StatsUI:NewRow(GetItemName(PointRate:get_field("ID")) .. ": " .. tostring(PointRate:get_field("Rate")))
                 end
 
                 local customTypeDataLen = _CustomTypeData:call("get_Count")
@@ -804,7 +961,7 @@ end,
                     local idsLen = IDs:call("get_Count")
                     for j = 0, idsLen - 1, 1 do
                         local id = IDs:call("get_Item", j)
-                        idsStr = idsStr .. tostring(ItemIDMap[id]) .. ", "
+                        idsStr = idsStr .. tostring(GetItemName(id)) .. ", "
                     end
 
                     StatsUI:NewRow(tostring(i) .. ": " .. tostring(idsStr))
@@ -1005,13 +1162,19 @@ end,
 )
 
 -- === Menu ===
-
+local clicks = 0
 re.on_draw_ui(function()
 	local configChanged = false
     if imgui.tree_node("RE4 Overlay") then
 		local changed = false
 		changed, Config.Enabled = imgui.checkbox("Enabled", Config.Enabled)
 		configChanged = configChanged or changed
+
+        imgui.text("Language: affect Charm prediction only")
+		local langIdx = FindIndex(Languages, Config.Language)
+		changed, langIdx = imgui.combo("Language", langIdx, Languages)
+		configChanged = configChanged or changed
+		Config.Language = Languages[langIdx]
 
         _, Config.FontSize = imgui.drag_int("Font Size", Config.FontSize, 1, 10, 30)
         if imgui.tree_node("Cheat Utils") then
@@ -1064,6 +1227,9 @@ re.on_draw_ui(function()
             configChanged = configChanged or changed
             changed, Config.CheatConfig.SkipRadio = imgui.checkbox("Skip Radio", Config.CheatConfig.SkipRadio)
             configChanged = configChanged or changed
+            changed, Config.CheatConfig.PredictCharm = imgui.checkbox("Predict Charm Gacha (CN name only for now)", Config.CheatConfig.PredictCharm)
+            configChanged = configChanged or changed
+
             imgui.tree_pop()
         end
 
@@ -1150,10 +1316,46 @@ re.on_draw_ui(function()
 			imgui.tree_pop()
 		end
 
+        local saveMgr = GetSaveDataManager()
+        if saveMgr ~= nil and imgui.tree_node("Save Management (Danger & WIP)") then
+            imgui.push_font(fontCN)
+            local allSlotIDs = saveMgr:call("getAllSaveSlotNo()")
+            local slotsLen = allSlotIDs:call("get_Count")
+
+            local saveDetailList = saveMgr:call("getSaveFileDetailList", 0, 21)
+            local savesLen = saveDetailList:call("get_Count")
+            -- imgui.text("== SaveSlots (" .. tostring(slotsLen) .. ") ==")
+            -- for i = 0, slotsLen - 1, 1 do
+            --     local slotID = allSlotIDs:call("get_Item", i)
+            --     imgui.text("Slot " .. tostring(i) .. ": " .. tostring(slotID))
+            -- end
+            imgui.text("== SaveSlots (" .. tostring(savesLen) .. ") ==")
+            for i = 0, savesLen - 1, 1 do
+                local save = saveDetailList:call("get_Item", i):call("get_SaveFileDetail()")
+
+                imgui.text("----- Slot " .. tostring(i) .. " -----")
+                imgui.text(tostring(save:call("get_Slot")) .. ": " .. tostring(save:call("get_SubTitle()")) .. " | " .. tostring(save:call("get_Detail()")))
+
+                local timestampStr = tostring(save:call("get_LastUpdateTimeStamp"))
+                -- local timestamp = tonumber(timestampStr:sub(1, #timestampStr - 9))
+                -- imgui.text("Last modified date: " .. os.date("!%Y-%m-%d %H:%M:%S", 1679847024))
+                imgui.text("Last modified timestamp: " .. timestampStr)
+                imgui.text("Clicks " .. tostring(clicks))
+                if imgui.button("Save at slot " .. tostring(i)) then
+                    clicks = clicks + 1
+                    save:call("get_IsBusy()")
+                    save:call("requestStartSaveGameDataFlow", i , nil)
+                end
+            end
+
+            imgui.pop_font()
+            imgui.tree_pop()
+        end
+
 		changed, Config.DebugMode = imgui.checkbox("DebugMode (prints more fields in the overlay)", Config.DebugMode)
 		configChanged = configChanged or changed
 
-		changed, Config.TesterMode = imgui.checkbox("TesterMode (logs many data in the overlay, expected to reset script frequently to clear them)", Config.TesterMode)
+		changed, Config.TesterMode = imgui.checkbox("TesterMode (logs many data in the overlay, expected to reset script frequently to clear them) require reset script to enable", Config.TesterMode)
 		configChanged = configChanged or changed
 
 		changed, Config.DangerMode = imgui.checkbox("DangerMode (dev only, untested, undocumented and unstable functionalities)", Config.DangerMode)
