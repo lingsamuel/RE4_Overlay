@@ -52,6 +52,12 @@ local CJK_GLYPH_RANGES = {
 local fontCN = imgui.load_font(CN_FONT_NAME, CN_FONT_SIZE, CJK_GLYPH_RANGES)
 
 
+local SceneManager = sdk.get_native_singleton("via.SceneManager")
+local function GetSceneManager()
+    if SceneManager == nil then SceneManager = sdk.get_native_singleton("via.SceneManager") end
+	return SceneManager
+end
+
 local SaveDataManager = sdk.get_managed_singleton("share.SaveDataManager")
 local function GetSaveDataManager()
     if SaveDataManager == nil then SaveDataManager = sdk.get_managed_singleton("share.SaveDataManager") end
@@ -752,6 +758,191 @@ local function initFont(size)
     return fontTable[size]
 end
 
+local TypeDefSceneManager = sdk.find_type_definition("via.SceneManager")
+
+local function DisplayEnemyContext(EnemyUI, enemyName, enemyCtx, masterPlayer)
+    if Config.DebugMode then
+        EnemyUI:NewRow(enemyName .. ": ")
+    end
+    if enemyCtx == nil then
+        if Config.DebugMode then
+            EnemyUI:NewRow(" is nil")
+        end
+        return
+    end
+
+    local allow = true
+
+    local kindID = enemyCtx:call("get_KindID")
+    local kind = KindMap[kindID]
+    local lively = enemyCtx:call("get_IsLively")
+    local combatReady = enemyCtx:call("get_IsCombatReady")
+    if Config.DebugMode then
+        -- kind
+        EnemyUI:NewRow(" KindID: ".. tostring(kindID) .. "/" .. kind)
+        EnemyUI:NewRow(" Lively: ".. tostring(lively))
+        EnemyUI:NewRow(" IsCombatReady: ".. tostring(combatReady))
+    end
+
+    allow = allow and (lively and combatReady)
+    if kind == "ch1_f1z0" then
+        -- Del Lago has special value
+        allow = true
+    end
+
+    if not allow then
+        return
+    end
+
+    local hp = enemyCtx:call("get_HitPoint")
+    if hp == nil then
+        if Config.DebugMode then
+            EnemyUI:NewRow(" HP is nil")
+        end
+        return
+    end
+
+    local currentHP = hp:call("get_CurrentHitPoint")
+    local maxHP = hp:call("get_DefaultHitPoint")
+
+    -- Floating UI
+    if Config.FloatingUI.Enabled and masterPlayer ~= nil then
+        local allowFloating = true
+
+        local playerPos = masterPlayer:call("get_Position")
+        local worldPos = enemyCtx:call("get_Position")
+        local delta = playerPos - worldPos
+        local distance = math.sqrt(delta.x * delta.x + delta.y * delta.y)
+
+        if Config.FloatingUI.FilterMaxHPEnemy and currentHP >= maxHP then
+            allowFloating = false
+        end
+
+        if distance > Config.FloatingUI.MaxDistance then
+            if Config.FloatingUI.IgnoreDistanceIfDamaged and currentHP < maxHP then
+                allowFloating = true
+            else
+                allowFloating = false
+            end
+        end
+
+        if Config.FloatingUI.FilterBlockedEnemy then
+            allowFloating = allowFloating and enemyCtx:call("get_HasRayToPlayer")
+        end
+
+        if Config.DebugMode then
+            EnemyUI:NewRow(" Distance: ".. FloatColumn(distance))
+        end
+
+        if allowFloating then
+            local height = Config.FloatingUI.Height
+            local width = Config.FloatingUI.Width
+
+            local scale = (Config.FloatingUI.MaxDistance - distance) / Config.FloatingUI.MaxDistance
+            if distance > Config.FloatingUI.MaxDistance then
+                scale = Config.FloatingUI.IgnoreDistanceIfDamagedScale
+            end
+            if scale < Config.FloatingUI.MinScale then
+                scale = Config.FloatingUI.MinScale
+            end
+            if Config.FloatingUI.ScaleHeightByDistance then
+                height = height * scale
+            end
+            if Config.FloatingUI.ScaleWidthByDistance then
+                width = width * scale
+            end
+
+            if Config.DebugMode then
+                EnemyUI:NewRow(" Bar Scale: ".. FloatColumn(scale))
+            end
+
+            worldPos.x = worldPos.x + Config.FloatingUI.WorldPosOffsetX
+            worldPos.y = worldPos.y + Config.FloatingUI.WorldPosOffsetY
+            worldPos.z = worldPos.z + Config.FloatingUI.WorldPosOffsetZ
+            local screenPos = draw.world_to_screen(worldPos)
+
+            if screenPos ~= nil then
+                local floatingX = screenPos.x + Config.FloatingUI.ScreenPosOffsetX
+                local floatingY = screenPos.y + Config.FloatingUI.ScreenPosOffsetY
+                if Config.FloatingUI.DisplayNumber then
+                    local hpMsg = "HP: " .. tostring(currentHP) .. "/" .. tostring(maxHP)
+                    if Config.TesterMode then
+                        hpMsg = hpMsg .. " / " .. tostring(enemyCtx:call("get_ItemDropCount"))
+                    end
+                    d2d.text(initFont(Config.FloatingUI.FontSize), hpMsg, floatingX, floatingY - 24, 0xFFFFFFFF)
+                end
+                d2d.fill_rect(floatingX - 1, floatingY - 1, width + 2, height + 2, 0xFF000000)
+                d2d.fill_rect(floatingX, floatingY, width, height, 0xFFCCCCCC)
+                d2d.fill_rect(floatingX, floatingY, currentHP / maxHP * width, height, 0xFF5c9e76)
+            end
+        end
+
+    end
+
+    -- Enemy UI Panel
+    local allowEnemy = currentHP > 0
+    if Config.EnemyUI.FilterMaxHPEnemy then
+        allowEnemy = allowEnemy and currentHP < maxHP
+    end
+    if Config.EnemyUI.Enabled and allowEnemy then
+        EnemyUI:NewRow(enemyName)
+
+        -- hp
+        DrawHP(EnemyUI, " HP: ", hp, Config.EnemyUI.DrawEnemyHPBar, Config.EnemyUI.Width, 0)
+        -- EnemyUI:NewRow(" HP: "
+        --     .. tostring(currentHP) .. "/"
+        --     .. tostring(maxHP)
+        -- )
+
+        -- add rank
+        local addRank = enemyCtx:call("get_GameRankAdd")
+        if addRank ~= 0 then
+            EnemyUI:NewRow(" GameRankAdd: " .. tostring(addRank))
+        end
+
+        -- parts
+        local partsDict = enemyCtx:call("get_BreakPartsHitPointDict") -- Dict<<BodyParts, BodyPartsSide>, HitPoint>
+        if partsDict ~= nil then
+            local parts = partsDict:get_field('_entries')
+
+            local j = 0
+            for _,k in pairs(parts) do
+                local key = k:get_field('key')
+                local bodyParts = key:get_field("Item1")
+                local bodyPartsSide = key:get_field("Item2")
+                local partHP = k:get_field('value')
+                if partHP ~= nil then
+                    local partCurrentHP = partHP:call("get_CurrentHitPoint")
+                    local partMaxHP = partHP:call("get_DefaultHitPoint")
+
+                    local allow = true
+                    if Config.EnemyUI.FilterMaxHPPart then
+                        allow = allow and partCurrentHP < partMaxHP
+                    end
+                    if Config.EnemyUI.FilterUnbreakablePart then
+                        allow = allow and partMaxHP < maxHP
+                    end
+                    if allow then
+                        if Config.EnemyUI.DisplayPartHP then
+                            DrawHP(EnemyUI, "  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): ", partHP, Config.EnemyUI.DrawPartHPBar, Config.EnemyUI.Width, 20)
+                        end
+                    end
+                end
+                j = j + 1
+            end
+        end
+
+        -- weakpoint
+
+        -- WeakPointData? WeakPointUnit?
+
+        -- if kind == "ch1_d6z0" then
+        --     -- chainsaw.Ch1d6z0Context
+        --     EnemyUI:NewRow(" WeakPointType: " .. tostring(enemyCtx:call("get_WeakPointType")))
+        -- end
+    end
+end
+
 d2d.register(function()
 	initFont()
 end,
@@ -1025,198 +1216,74 @@ end,
             end
         end
 
+        local EnemyUI = UI:new(nil, Config.EnemyUI.PosX, Config.EnemyUI.PosY, Config.EnemyUI.RowHeight, Config.EnemyUI.Width, initFont())
+
+        -- -- local list = enemy:call("get_LinkEnemyList") -- List<chainsaw.EnemeyHeadUpdater>
+        -- local combatEnemyDB = enemy:call("get_CombatEnemyDB") -- Dict<chainsaw.CharacterKindID, Hashset<UInt32>> -- guid? pointer?
+        -- local combatEnemy = enemy:get_field("_CombatEnemyCollection") -- Hashset<UInt32> -- GUID? pointer?
+
+        if Config.EnemyUI.Enabled then
+            EnemyUI:DrawBackground(40)
+            EnemyUI:NewRow("-- Enemy UI --")
+        end
+
+        -- if Config.SearchDelLago then
+        --     local sceneMgr = GetSceneManager()
+        --     if sceneMgr ~= nil then
+        --         local scene = sdk.call_native_func(sceneMgr, TypeDefSceneManager, "get_CurrentScene")
+        --         if scene ~= nil then
+        --             -- StatsUI:NewRow("SceneName: " .. tostring(scene:call("get_Name")))
+        --             -- 湖主：1f1z0 不在 enemy list 里
+        --             local fishBody = scene:call("findGameObject(System.String)", "ch1f1z0_body")
+        --             if fishBody ~= nil then
+        --                 local updater = fishBody:call("getComponent(System.Type)", sdk.typeof("chainsaw.Ch1f1z0BodyUpdater"))
+        --                 if updater ~= nil then
+        --                     local context = updater:call("get_Context")
+        --                     if context ~= nil then
+        --                         DisplayEnemyContext(EnemyUI, "Del Lago", context, masterPlayer)
+        --                         -- local hp = context:call("get_HitPoint")
+        --                         -- DrawHP(EnemyUI, "Del Lago HP: ", hp, Config.EnemyUI.DrawEnemyHPBar, Config.EnemyUI.Width, 0)
+        --                     else
+        --                         -- EnemyUI:NewRow("ctx is nil")
+        --                     end
+        --                 else
+        --                     -- EnemyUI:NewRow("updater is nil ")
+        --                 end
+        --                 --     local comps = fishBody:call("get_Components")
+        --                 --     StatsUI:NewRow("Fish: " .. tostring(comps:call("get_Count")))
+        --                 --     local len = comps:call("get_Count")
+        --                 --     for i = 0, len - 1, 1 do
+        --                 --         local comp = comps:call("get_Item", i)
+        --                 --         StatsUI:NewRow("Fish: " .. tostring(comp:call("ToString")))
+        --                 --     end
+        --             end
+        --         end
+        --     end
+        -- end
+
         local enemy = GetEnemyManager()
         if enemy ~= nil then
-            local EnemyUI = UI:new(nil, Config.EnemyUI.PosX, Config.EnemyUI.PosY, Config.EnemyUI.RowHeight, Config.EnemyUI.Width, initFont())
-
-            -- -- local list = enemy:call("get_LinkEnemyList") -- List<chainsaw.EnemeyHeadUpdater>
-
-            -- local combatEnemyDB = enemy:call("get_CombatEnemyDB") -- Dict<chainsaw.CharacterKindID, Hashset<UInt32>> -- guid? pointer?
-
-            -- local combatEnemy = enemy:get_field("_CombatEnemyCollection") -- Hashset<UInt32> -- GUID? pointer?
-
-            if Config.EnemyUI.Enabled then
-                EnemyUI:DrawBackground(40)
-                EnemyUI:NewRow("-- Enemey UI --")
-            end
-
-            -- 湖主：1f1z0 不在 enemy list 里
             local enemies
             if Config.EnemyUI.FilterNoInSightEnemy then
                 enemies = enemy:call("get_CameraInsideEnemyContextRefs") -- chainsaw.EnemyBaseContext[]
             else
                 enemies = GetEnemyList()
             end
-            local enemyLen = enemies:call("get_Count")
 
-            if Config.EnemyUI.Enabled and Config.DebugMode then
-                EnemyUI:NewRow("EnemyCount: " .. tostring(enemyLen))
-            end
+            if enemies ~= nil then
+                local enemyLen = enemies:call("get_Count")
 
-            for i = 0, enemyLen - 1, 1 do
-                local enemyCtx = enemies:call("get_Item", i)
-
-                if enemyCtx ~= nil then
-                    local lively = enemyCtx:call("get_IsLively")
-                    local combatReady = enemyCtx:call("get_IsCombatReady")
-                    local hp = enemyCtx:call("get_HitPoint")
-                    if lively and combatReady and hp ~= nil then
-                        local currentHP = hp:call("get_CurrentHitPoint")
-                        local maxHP = hp:call("get_DefaultHitPoint")
-
-                        -- Floating UI
-                        if Config.FloatingUI.Enabled and masterPlayer ~= nil then
-                            local allowFloating = true
-
-                            local playerPos = masterPlayer:call("get_Position")
-                            local worldPos = enemyCtx:call("get_Position")
-                            local delta = playerPos - worldPos
-                            local distance = math.sqrt(delta.x * delta.x + delta.y * delta.y)
-
-                            if Config.FloatingUI.FilterMaxHPEnemy and currentHP >= maxHP then
-                                allowFloating = false
-                            end
-
-                            if distance > Config.FloatingUI.MaxDistance then
-                                if Config.FloatingUI.IgnoreDistanceIfDamaged and currentHP < maxHP then
-                                    allowFloating = true
-                                else
-                                    allowFloating = false
-                                end
-                            end
-
-                            if Config.FloatingUI.FilterBlockedEnemy then
-                                allowFloating = allowFloating and enemyCtx:call("get_HasRayToPlayer")
-                            end
-
-                            if Config.DebugMode then
-                                EnemyUI:NewRow("Enemy: " .. tostring(i) .. " Distance: ".. FloatColumn(distance))
-                            end
-
-                            if allowFloating then
-                                local height = Config.FloatingUI.Height
-                                local width = Config.FloatingUI.Width
-
-                                local scale = (Config.FloatingUI.MaxDistance - distance) / Config.FloatingUI.MaxDistance
-                                if distance > Config.FloatingUI.MaxDistance then
-                                    scale = Config.FloatingUI.IgnoreDistanceIfDamagedScale
-                                end
-                                if scale < Config.FloatingUI.MinScale then
-                                    scale = Config.FloatingUI.MinScale
-                                end
-                                if Config.FloatingUI.ScaleHeightByDistance then
-                                    height = height * scale
-                                end
-                                if Config.FloatingUI.ScaleWidthByDistance then
-                                    width = width * scale
-                                end
-
-                                if Config.DebugMode then
-                                    EnemyUI:NewRow("Enemy: " .. tostring(i) .. " Bar Scale: ".. FloatColumn(scale))
-                                end
-
-                                worldPos.x = worldPos.x + Config.FloatingUI.WorldPosOffsetX
-                                worldPos.y = worldPos.y + Config.FloatingUI.WorldPosOffsetY
-                                worldPos.z = worldPos.z + Config.FloatingUI.WorldPosOffsetZ
-                                local screenPos = draw.world_to_screen(worldPos)
-
-                                if screenPos ~= nil then
-                                    local floatingX = screenPos.x + Config.FloatingUI.ScreenPosOffsetX
-                                    local floatingY = screenPos.y + Config.FloatingUI.ScreenPosOffsetY
-                                    if Config.FloatingUI.DisplayNumber then
-                                        local hpMsg = "HP: " .. tostring(currentHP) .. "/" .. tostring(maxHP)
-                                        if Config.TesterMode then
-                                            hpMsg = hpMsg .. " / " .. tostring(enemyCtx:call("get_ItemDropCount"))
-                                        end
-                                        d2d.text(initFont(Config.FloatingUI.FontSize), hpMsg, floatingX, floatingY - 24, 0xFFFFFFFF)
-                                    end
-                                    d2d.fill_rect(floatingX - 1, floatingY - 1, width + 2, height + 2, 0xFF000000)
-                                    d2d.fill_rect(floatingX, floatingY, width, height, 0xFFCCCCCC)
-                                    d2d.fill_rect(floatingX, floatingY, currentHP / maxHP * width, height, 0xFF5c9e76)
-                                end
-                            end
-
-                        end
-
-                        -- Enemy UI Panel
-                        local allowEnemy = currentHP > 0
-                        if Config.EnemyUI.FilterMaxHPEnemy then
-                            allowEnemy = allowEnemy and currentHP < maxHP
-                        end
-                        if Config.EnemyUI.Enabled and allowEnemy then
-                            EnemyUI:NewRow("Enemy: " .. tostring(i))
-
-                            local kindID = enemyCtx:call("get_KindID")
-                            local kind = KindMap[kindID]
-                            if Config.DebugMode then
-                                -- kind
-                                EnemyUI:NewRow(" KindID: ".. tostring(kindID) .. "/" .. kind)
-                                EnemyUI:NewRow(" Lively: ".. tostring(lively))
-                                EnemyUI:NewRow(" IsCombatReady: ".. tostring(combatReady))
-                            end
-
-                            -- hp
-                            DrawHP(EnemyUI, " HP: ", hp, Config.EnemyUI.DrawEnemyHPBar, Config.EnemyUI.Width, 0)
-                            -- EnemyUI:NewRow(" HP: "
-                            --     .. tostring(currentHP) .. "/"
-                            --     .. tostring(maxHP)
-                            -- )
-
-                            -- add rank
-                            local addRank = enemyCtx:call("get_GameRankAdd")
-                            if addRank ~= 0 then
-                                EnemyUI:NewRow(" GameRankAdd: " .. tostring(addRank))
-                            end
-
-                            -- parts
-                            local partsDict = enemyCtx:call("get_BreakPartsHitPointDict") -- Dict<<BodyParts, BodyPartsSide>, HitPoint>
-                            if partsDict ~= nil then
-                                local parts = partsDict:get_field('_entries')
-
-                                local j = 0
-                                for _,k in pairs(parts) do
-                                    local key = k:get_field('key')
-                                    local bodyParts = key:get_field("Item1")
-                                    local bodyPartsSide = key:get_field("Item2")
-                                    local partHP = k:get_field('value')
-                                    if partHP ~= nil then
-                                        local partCurrentHP = partHP:call("get_CurrentHitPoint")
-                                        local partMaxHP = partHP:call("get_DefaultHitPoint")
-
-                                        local allow = true
-                                        if Config.EnemyUI.FilterMaxHPPart then
-                                            allow = allow and partCurrentHP < partMaxHP
-                                        end
-                                        if Config.EnemyUI.FilterUnbreakablePart then
-                                            allow = allow and partMaxHP < maxHP
-                                        end
-                                        if allow then
-                                            if Config.EnemyUI.DisplayPartHP then
-                                                DrawHP(EnemyUI, "  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): ", partHP, Config.EnemyUI.DrawPartHPBar, Config.EnemyUI.Width, 20)
-                                            end
-                                            -- EnemyUI:NewRow("  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): "
-                                            --     .. tostring(partCurrentHP) .. "/"
-                                            --     .. tostring(partMaxHP)
-                                            -- )
-                                        end
-                                    end
-                                    j = j + 1
-                                end
-                            end
-
-                            -- weakpoint
-
-                            -- WeakPointData? WeakPointUnit?
-
-                            -- if kind == "ch1_d6z0" then
-                            --     -- chainsaw.Ch1d6z0Context
-                            --     EnemyUI:NewRow(" WeakPointType: " .. tostring(enemyCtx:call("get_WeakPointType")))
-                            -- end
-                        end
-                    end
+                if Config.EnemyUI.Enabled and Config.DebugMode then
+                    EnemyUI:NewRow("EnemyCount: " .. tostring(enemyLen))
                 end
-            end
 
+                for i = 0, enemyLen - 1, 1 do
+                    local enemyCtx = enemies:call("get_Item", i)
+
+                    DisplayEnemyContext(EnemyUI, "Enemy: " .. tostring(i), enemyCtx, masterPlayer)
+                end
+
+            end
             -- chainsaw.EnemyBaseContext: GameRankAdd
             -- chainsaw.CharacterContext: KindID, SpawnerID (type is ContextID?), IsRespawn, BreakPartsHitPointList, _HitPointVital
             -- chainsaw.character.chxxxxx.WeakPointBackup
