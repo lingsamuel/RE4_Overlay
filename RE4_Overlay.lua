@@ -218,6 +218,9 @@ if Config.CheatConfig == nil then
         LockHitPoint = false,
     }
 end
+if Config.CheatConfig.NoHitMode == nil then
+    Config.CheatConfig.NoHitMode = false
+end
 if Config.CheatConfig.UnlimitItemAndDurability == nil then
     Config.CheatConfig.UnlimitItemAndDurability = false
 end
@@ -392,6 +395,10 @@ local function SetInvincible(playerBaseContext)
     local hp = playerBaseContext:call("get_HitPoint")
     if Config.CheatConfig.LockHitPoint then
         hp:call("recovery", 99999)
+    end
+
+    if Config.CheatConfig.NoHitMode then
+        hp:call("set_Invincible", true)
     end
 
     -- invisible attempt, but failed
@@ -884,6 +891,12 @@ end,
                 if Config.StatsUI.Enabled then
                     local hp = playerCtx:call("get_HitPoint")
                     DrawHP(StatsUI, "Player " .. tostring(i) .. " HP: ", hp, Config.StatsUI.DrawPlayerHPBar, Config.StatsUI.Width, 0)
+                    if Config.DebugMode then
+                        StatsUI:NewRow("    Invincible: " .. tostring(hp:call("get_Invincible")))
+                        StatsUI:NewRow("    NoDamage: " .. tostring(hp:call("get_NoDamage")))
+                        StatsUI:NewRow("    NoDeath: " .. tostring(hp:call("get_NoDeath")))
+                        StatsUI:NewRow("    Immortal: " .. tostring(hp:call("get_Immortal")))
+                    end
                 end
                 -- StatsUI:NewRow("Player " .. tostring(i) .. " HP: " ..
                 --     tostring(hp:call("get_CurrentHitPoint")) .. "/" ..
@@ -1237,8 +1250,17 @@ re.on_draw_ui(function()
 
             local player = getMasterPlayer()
             if player ~= nil then
-                changed, player["<HitPoint>k__BackingField"]["<Invincible>k__BackingField"] = imgui.checkbox("Invincibility", player["<HitPoint>k__BackingField"]["<Invincible>k__BackingField"])
+
+                imgui.text("Invincibility (WARNING: Make sure disable it before save. Or it may corrupt save or have unexpected bugs, I am not sure. )")
+                changed, Config.CheatConfig.NoHitMode = imgui.checkbox("Invincibility", Config.CheatConfig.NoHitMode)
                 configChanged = configChanged or changed
+
+                if changed and Config.CheatConfig.NoHitMode == false then
+                    local hp = player:call("get_HitPoint")
+                    hp:call("set_Invincible", false)
+                end
+                -- changed, player["<HitPoint>k__BackingField"]["<Invincible>k__BackingField"] = imgui.checkbox("Invincibility", player["<HitPoint>k__BackingField"]["<Invincible>k__BackingField"])
+                -- configChanged = configChanged or changed
             end
 
             imgui.text("Set PTAS")
@@ -1253,7 +1275,7 @@ re.on_draw_ui(function()
 
             local gameRank = GetGameRankSystem()
 
-            imgui.text("Set ActionPoint")
+            imgui.text("Set ActionPoint (shoot, get damaged or any other action to take effect)")
 			local _, actionPointValue = imgui.input_text("Set ActionPoint", "");
             local actionPoint = tonumber(actionPointValue)
             if actionPoint ~= nil then
@@ -1264,7 +1286,7 @@ re.on_draw_ui(function()
                 end
 			end
 
-            imgui.text("Set ItemPoint")
+            imgui.text("Set ItemPoint (shoot, get damaged or any other action to take effect)")
 			local _, itemPointValue = imgui.input_text("Set ItemPoint", "");
             local itemPoint = tonumber(itemPointValue)
             if itemPoint ~= nil then
