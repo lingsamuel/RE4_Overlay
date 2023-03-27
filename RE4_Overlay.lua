@@ -1227,7 +1227,7 @@ re.on_draw_ui(function()
             configChanged = configChanged or changed
             changed, Config.CheatConfig.SkipRadio = imgui.checkbox("Skip Radio", Config.CheatConfig.SkipRadio)
             configChanged = configChanged or changed
-            changed, Config.CheatConfig.PredictCharm = imgui.checkbox("Predict Charm Gacha (CN name only for now)", Config.CheatConfig.PredictCharm)
+            changed, Config.CheatConfig.PredictCharm = imgui.checkbox("Predict Charm Gacha", Config.CheatConfig.PredictCharm)
             configChanged = configChanged or changed
 
             imgui.tree_pop()
