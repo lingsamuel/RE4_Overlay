@@ -107,9 +107,12 @@ local function GetCharacterManager()
 end
 
 local function getMasterPlayer()
-    return GetCharacterManager():call("getPlayerContextRef")
+    local mgr = GetCharacterManager()
+    if mgr == nil then return nil end
+    return mgr:call("getPlayerContextRef")
 end
 
+-- return cha:call("get_DollNpcContextList()")
 local function GetEnemyList()
     local cha = GetCharacterManager()
     if cha == nil then return nil end
@@ -214,9 +217,6 @@ if Config.CheatConfig == nil then
     Config.CheatConfig = {
         LockHitPoint = false,
     }
-end
-if Config.CheatConfig.NoHitMode == nil then
-    Config.CheatConfig.NoHitMode = false
 end
 if Config.CheatConfig.UnlimitItemAndDurability == nil then
     Config.CheatConfig.UnlimitItemAndDurability = false
@@ -392,19 +392,6 @@ local function SetInvincible(playerBaseContext)
     local hp = playerBaseContext:call("get_HitPoint")
     if Config.CheatConfig.LockHitPoint then
         hp:call("recovery", 99999)
-    end
-
-    if Config.CheatConfig.NoHitMode then
-        -- shouldn't call Set_XXX in real life, it may break the save
-        hp:call("set_Invincible", true)
-        -- hp:call("set_NoDamage", true)
-        -- hp:call("set_NoDeath", true)
-        -- hp:call("set_Immortal", true)
-    else
-        hp:call("set_Invincible", false)
-        -- hp:call("set_NoDamage", false)
-        -- hp:call("set_NoDeath", false)
-        -- hp:call("set_Immortal", false)
     end
 
     -- invisible attempt, but failed
@@ -1039,6 +1026,8 @@ end,
                 EnemyUI:DrawBackground(40)
                 EnemyUI:NewRow("-- Enemey UI --")
             end
+
+            -- 湖主：1f1z0 不在 enemy list 里
             local enemies
             if Config.EnemyUI.FilterNoInSightEnemy then
                 enemies = enemy:call("get_CameraInsideEnemyContextRefs") -- chainsaw.EnemyBaseContext[]
@@ -1117,7 +1106,7 @@ end,
                                 worldPos.y = worldPos.y + Config.FloatingUI.WorldPosOffsetY
                                 worldPos.z = worldPos.z + Config.FloatingUI.WorldPosOffsetZ
                                 local screenPos = draw.world_to_screen(worldPos)
-                                
+
                                 if screenPos ~= nil then
                                     local floatingX = screenPos.x + Config.FloatingUI.ScreenPosOffsetX
                                     local floatingY = screenPos.y + Config.FloatingUI.ScreenPosOffsetY
@@ -1246,9 +1235,11 @@ re.on_draw_ui(function()
             changed, Config.CheatConfig.UnlimitItemAndDurability = imgui.checkbox("Infinite Item and Durability (No Consumption)", Config.CheatConfig.UnlimitItemAndDurability)
             configChanged = configChanged or changed
 
-            imgui.text("No Hit Mode (WARNING: may corrupt save or have unexpected bugs, I am not sure)")
-            changed, Config.CheatConfig.NoHitMode = imgui.checkbox("No Hit Mode", Config.CheatConfig.NoHitMode)
-            configChanged = configChanged or changed
+            local player = getMasterPlayer()
+            if player ~= nil then
+                changed, player["<HitPoint>k__BackingField"]["<Invincible>k__BackingField"] = imgui.checkbox("Invincibility", player["<HitPoint>k__BackingField"]["<Invincible>k__BackingField"])
+                configChanged = configChanged or changed
+            end
 
             imgui.text("Set PTAS")
 			local _, ptasValue = imgui.input_text("Set PTAS", "");
