@@ -765,7 +765,9 @@ end,
         if not Config.Enabled then return end
 
         local StatsUI = UI:new(nil, Config.StatsUI.PosX, Config.StatsUI.PosY, Config.StatsUI.RowHeight, Config.StatsUI.Width, initFont())
-        StatsUI:DrawBackground(25)
+        if Config.StatsUI.Enabled then
+            StatsUI:DrawBackground(25)
+        end
 
         if Config.TesterMode then
             for i = 1, #countTable, 1 do
@@ -824,7 +826,7 @@ end,
         end
 
         local stats = GetGameStatsManager()
-        if stats ~= nil then
+        if Config.StatsUI.Enabled and stats ~= nil then
             local igtStr = tostring(stats:call("getCalculatingRecordTime()"))
             local len = #tostring(igtStr)
             local ms = tonumber(igtStr:sub(len - 5, len - 3))
@@ -891,9 +893,9 @@ end,
             local playerLen = players:call("get_Count")
             for i = 0, playerLen - 1, 1 do
                 local playerCtx = players:call("get_Item", i)
-                local hp = playerCtx:call("get_HitPoint")
 
                 if Config.StatsUI.Enabled then
+                    local hp = playerCtx:call("get_HitPoint")
                     DrawHP(StatsUI, "Player " .. tostring(i) .. " HP: ", hp, Config.StatsUI.DrawPlayerHPBar, Config.StatsUI.Width, 0)
                 end
                 -- StatsUI:NewRow("Player " .. tostring(i) .. " HP: " ..
@@ -907,7 +909,7 @@ end,
             end
         end
 
-        if masterPlayer ~= nil then
+        if Config.StatsUI.Enabled and masterPlayer ~= nil then
             StatsUI:NewRow("HateRate: " .. FloatColumn(masterPlayer:call("get_HateRate", nil)))
         end
 
@@ -1033,9 +1035,10 @@ end,
 
             -- local combatEnemy = enemy:get_field("_CombatEnemyCollection") -- Hashset<UInt32> -- GUID? pointer?
 
-            EnemyUI:DrawBackground(40)
-            EnemyUI:NewRow("-- Enemey UI --")
-
+            if Config.EnemyUI.Enabled then
+                EnemyUI:DrawBackground(40)
+                EnemyUI:NewRow("-- Enemey UI --")
+            end
             local enemies
             if Config.EnemyUI.FilterNoInSightEnemy then
                 enemies = enemy:call("get_CameraInsideEnemyContextRefs") -- chainsaw.EnemyBaseContext[]
@@ -1044,7 +1047,7 @@ end,
             end
             local enemyLen = enemies:call("get_Count")
 
-            if Config.DebugMode then
+            if Config.EnemyUI.Enabled and Config.DebugMode then
                 EnemyUI:NewRow("EnemyCount: " .. tostring(enemyLen))
             end
 
