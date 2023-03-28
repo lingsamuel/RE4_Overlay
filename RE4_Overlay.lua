@@ -164,6 +164,9 @@ end
 if Config.StatsUI.Enabled == nil then
     Config.StatsUI.Enabled = true
 end
+if Config.StatsUI.RowsCount == nil then
+    Config.StatsUI.RowsCount = 25
+end
 
 if Config.EnemyUI == nil then
     Config.EnemyUI = {
@@ -186,6 +189,9 @@ if Config.EnemyUI.DisplayPartHP == nil then
 end
 if Config.EnemyUI.FilterNoInSightEnemy == nil then
     Config.EnemyUI.FilterNoInSightEnemy = false
+end
+if Config.EnemyUI.RowsCount == nil then
+    Config.EnemyUI.RowsCount = 40
 end
 
 if Config.FloatingUI == nil then
@@ -218,6 +224,47 @@ end
 if Config.FloatingUI.FontSize == nil then
     Config.FloatingUI.FontSize = 18
 end
+
+if Config.DisplayConfig == nil then
+    Config.DisplayConfig = {}
+end
+
+local DisplayConfigOrder = {
+    "IGT",
+    "Game Rank (DA)",
+    "Action Point",
+    "Item Point",
+    "Backup Action Point",
+    "Backup Item Point",
+    "Fix Item Point",
+    "Retry Count",
+    "Kill Count",
+
+    "Player Damage Rate",
+
+    "Enemy DA Title",
+    "Enemy Damage Rate",
+    "Enemy Wince Rate",
+    "Enemy Break Rate",
+    "Enemy Stopping Rate",
+
+    "Knife Reduce Rate",
+    "Player HP Value",
+    "Player Hate Rate",
+    "Player Distance",
+
+    ----
+    "Enemy UI Title",
+    "Enemy Name",
+    "Enemy HP Value",
+    "Enemy Game Rank Add",
+    "Enemy Part HP Value",
+
+    ----
+    "Charm Manager Title",
+    "Charm Manager Random Table Seed",
+    "Charm Manager Random Table Counter"
+}
 
 if Config.CheatConfig == nil then
     Config.CheatConfig = {
@@ -716,13 +763,23 @@ function UI:GetCurrentRowPosY()
     return self.PosY + self.Row * self.RowHeight + 10
 end
 
-function UI:NewRow(str)
+function UI:NewRow(str, id)
+    if id ~= nil and id ~= "" then
+        if Config.DisplayConfig ~= nil then
+            if Config.DisplayConfig[id] == nil then
+                Config.DisplayConfig[id] = true
+            elseif Config.DisplayConfig[id] == false then
+                return
+            end
+        end
+    end
+
     d2d.text(self.Font, str, self.PosX + 10, self:GetCurrentRowPosY(), 0xFFFFFFFF)
     self.Row = self.Row + 1
 end
 
 function UI:DrawBackground(rows)
-    d2d.fill_rect(self.PosX, self.PosY, self.Width, rows * self.RowHeight + 20, 0x69000000)
+    d2d.fill_rect(self.PosX, self.PosY, self.Width, rows * self.RowHeight, 0x69000000)
 end
 
 local function FloatColumn(val)
@@ -735,10 +792,10 @@ end
 -- ==== Draw UI ====
 
 -- drawHPBar, width, leftOffset are optional
-local function DrawHP(ui, name, hp, drawHPBar, width, leftOffset)
+local function DrawHP(ui, name, hp, drawHPBar, width, leftOffset, id)
     local current = hp:call("get_CurrentHitPoint")
     local max = hp:call("get_DefaultHitPoint")
-    ui:NewRow(name .. tostring(current) .. "/" .. tostring(max))
+    ui:NewRow(name .. tostring(current) .. "/" .. tostring(max), id)
 
     if drawHPBar then
         if leftOffset == nil then leftOffset = 0 end
@@ -885,10 +942,10 @@ local function DisplayEnemyContext(EnemyUI, enemyName, enemyCtx, masterPlayer)
         allowEnemy = allowEnemy and currentHP < maxHP
     end
     if Config.EnemyUI.Enabled and allowEnemy then
-        EnemyUI:NewRow(enemyName)
+        EnemyUI:NewRow(enemyName, "Enemy Name")
 
         -- hp
-        DrawHP(EnemyUI, " HP: ", hp, Config.EnemyUI.DrawEnemyHPBar, Config.EnemyUI.Width, 0)
+        DrawHP(EnemyUI, " HP: ", hp, Config.EnemyUI.DrawEnemyHPBar, Config.EnemyUI.Width, 0, "Enemy HP Value")
         -- EnemyUI:NewRow(" HP: "
         --     .. tostring(currentHP) .. "/"
         --     .. tostring(maxHP)
@@ -897,7 +954,7 @@ local function DisplayEnemyContext(EnemyUI, enemyName, enemyCtx, masterPlayer)
         -- add rank
         local addRank = enemyCtx:call("get_GameRankAdd")
         if addRank ~= 0 then
-            EnemyUI:NewRow(" GameRankAdd: " .. tostring(addRank))
+            EnemyUI:NewRow(" GameRankAdd: " .. tostring(addRank), "Enemy Game Rank Add")
         end
 
         -- parts
@@ -924,7 +981,7 @@ local function DisplayEnemyContext(EnemyUI, enemyName, enemyCtx, masterPlayer)
                     end
                     if allow then
                         if Config.EnemyUI.DisplayPartHP then
-                            DrawHP(EnemyUI, "  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): ", partHP, Config.EnemyUI.DrawPartHPBar, Config.EnemyUI.Width, 20)
+                            DrawHP(EnemyUI, "  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): ", partHP, Config.EnemyUI.DrawPartHPBar, Config.EnemyUI.Width, 20, "Enemy Part HP Value")
                         end
                     end
                 end
@@ -951,7 +1008,7 @@ end,
 
         local StatsUI = UI:new(nil, Config.StatsUI.PosX, Config.StatsUI.PosY, Config.StatsUI.RowHeight, Config.StatsUI.Width, initFont())
         if Config.StatsUI.Enabled then
-            StatsUI:DrawBackground(25)
+            StatsUI:DrawBackground(Config.StatsUI.RowsCount or 25)
         end
 
         if Config.TesterMode then
@@ -969,22 +1026,25 @@ end,
             if charm ~= nil then
                 local lotteryTables = charm:get_field("_LotteryTable")
                 if lotteryTables ~= nil then
-                    StatsUI:NewRow("--- Charm Manager ---")
+                    StatsUI:NewRow("--- Charm Manager ---", "Charm Manager Title")
 
                     local len = lotteryTables:call("get_Count")
                     for i = 0, len - 1, 1 do
                         local table = lotteryTables:call("get_Item", i)
                         StatsUI:NewRow("Gold Token " .. tostring(i) .. " : ")
-                        StatsUI:NewRow(" Seed: " .. tostring(table:get_field("_Seed")))
-                        StatsUI:NewRow(" CurrentCount: " .. tostring(table:get_field("_CurrnetCount")))
+                        StatsUI:NewRow(" Seed: " .. tostring(table:get_field("_Seed")), "Charm Manager Random Table Seed")
+                        StatsUI:NewRow(" CurrentCount: " .. tostring(table:get_field("_CurrnetCount")), "Charm Manager Random Table Counter")
 
                         local lastCount = charm:get_field("_LotteryTable"):call("get_Item", i):get_field("_CurrnetCount")
                         local gacha = charm:call("drawingCharmGacha", i)
                         charm:get_field("_LotteryTable"):call("get_Item", i):set_field("_CurrnetCount", lastCount)
                         StatsUI:NewRow("Next Gacha: " .. tostring(gacha) .. ": " .. tostring(GetItemName(gacha)))
-                        StatsUI:NewRow("")
+                        if i ~= len - 1 then
+                            StatsUI:NewRow("")
+                        end
                     end
-                    StatsUI:NewRow("------")
+                    StatsUI:NewRow("------------------", "Charm Manager Title")
+                    StatsUI:NewRow("")
                 else
                     StatsUI:NewRow("CharmManager: LotteryTable is nil")
                 end
@@ -1014,11 +1074,14 @@ end,
         if Config.StatsUI.Enabled and stats ~= nil then
             local igtStr = tostring(stats:call("getCalculatingRecordTime()"))
             local len = #tostring(igtStr)
-            local ms = tonumber(igtStr:sub(len - 5, len - 3))
-            local igtSecond = tonumber(igtStr:sub(1, len - 6))
-            -- StatsUI:NewRow("IGT: " .. tostring(igtStr))
-            StatsUI:NewRow("IGT: " .. os.date("!%H:%M:%S", igtSecond) .. "." .. tostring(ms))
-
+            if len <= 1 then
+                StatsUI:NewRow("IGT: 0", "IGT")
+            else
+                local ms = tonumber(igtStr:sub(len - 5, len - 3))
+                local igtSecond = tonumber(igtStr:sub(1, len - 6))
+                -- StatsUI:NewRow("IGT: " .. tostring(igtStr))
+                StatsUI:NewRow("IGT: " .. os.date("!%H:%M:%S", igtSecond) .. "." .. tostring(ms), "IGT")
+            end
             if Config.TesterMode then
                 local timer = GetTimerManager()
                 if timer ~= nil then
@@ -1036,31 +1099,33 @@ end,
         local gameRank = GetGameRankSystem()
         -- local gameRank
         if Config.StatsUI.Enabled and gameRank ~= nil then
-            StatsUI:NewRow("GameRank: " .. tostring(gameRank:get_field("_GameRank")))
-            StatsUI:NewRow("ActionPoint: " .. FloatColumn(gameRank:get_field("_ActionPoint")))
-            StatsUI:NewRow("ItemPoint: " .. FloatColumn(gameRank:get_field("_ItemPoint")))
-            StatsUI:NewRow("BackupActionPoint: " .. FloatColumn(gameRank:get_field("BackupActionPoint")))
-            StatsUI:NewRow("BackupItemPoint: " .. FloatColumn(gameRank:get_field("BackupItemPoint")))
-            StatsUI:NewRow("FixItemPoint: " .. FloatColumn(gameRank:get_field("FixItemPoint")))
-            StatsUI:NewRow("RetryCount: " .. tostring(gameRank:call("get_RankPointPlRetryCount")))
+            StatsUI:NewRow("GameRank: " .. tostring(gameRank:get_field("_GameRank")), "Game Rank (DA)")
+            StatsUI:NewRow("ActionPoint: " .. FloatColumn(gameRank:get_field("_ActionPoint")), "Action Point")
+            StatsUI:NewRow("ItemPoint: " .. FloatColumn(gameRank:get_field("_ItemPoint")), "Item Point")
+            StatsUI:NewRow("BackupActionPoint: " .. FloatColumn(gameRank:get_field("BackupActionPoint")), "Backup Action Point")
+            StatsUI:NewRow("BackupItemPoint: " .. FloatColumn(gameRank:get_field("BackupItemPoint")), "Backup Item Point")
+            StatsUI:NewRow("FixItemPoint: " .. FloatColumn(gameRank:get_field("FixItemPoint")), "Fix Item Point")
+            StatsUI:NewRow("RetryCount: " .. tostring(gameRank:call("get_RankPointPlRetryCount")), "Retry Count")
 
             if stats ~= nil then
-                StatsUI:NewRow("KillCount: " .. tostring(stats:call("getKillCount")))
+                StatsUI:NewRow("KillCount: " .. tostring(stats:call("getKillCount")), "Kill Count")
             end
             if Config.TesterMode then
                 StatsUI:NewRow("lastRankPointKillCount: " .. tostring(lastRankPointKillCount))
             end
 
             StatsUI:NewRow("")
-            StatsUI:NewRow("PlayerDamageRate: " .. FloatColumn(gameRank:call("getRankPlayerDamageRate", nil)))
-            StatsUI:NewRow("-- Enemy --")
-            StatsUI:NewRow("DamageRate: " .. FloatColumn(gameRank:call("getRankEnemyDamageRate")))
-            StatsUI:NewRow("WinceRate: " .. FloatColumn(gameRank:call("getRankEnemyWinceRate")))
-            StatsUI:NewRow("BreakRate: " .. FloatColumn(gameRank:call("getRankEnemyBreakRate")))
-            StatsUI:NewRow("StoppingRate: " .. FloatColumn(gameRank:call("getRankEnemyStoppingRate")))
+            StatsUI:NewRow("PlayerDamageRate: " .. FloatColumn(gameRank:call("getRankPlayerDamageRate", nil)), "Player Damage Rate")
+            StatsUI:NewRow("-- Enemy --", "Enemy DA Title")
+            StatsUI:NewRow("DamageRate: " .. FloatColumn(gameRank:call("getRankEnemyDamageRate")), "Enemy Damage Rate")
+            StatsUI:NewRow("WinceRate: " .. FloatColumn(gameRank:call("getRankEnemyWinceRate")), "Enemy Wince Rate")
+            StatsUI:NewRow("BreakRate: " .. FloatColumn(gameRank:call("getRankEnemyBreakRate")), "Enemy Break Rate")
+            StatsUI:NewRow("StoppingRate: " .. FloatColumn(gameRank:call("getRankEnemyStoppingRate")), "Enemy Stopping Rate")
 
-            StatsUI:NewRow("")
-            StatsUI:NewRow("KnifeReduceRate: " .. FloatColumn(gameRank:call("getKnifeReduceRate")))
+            if Config.DisplayConfig["Knife Reduce Rate"] then
+                StatsUI:NewRow("")
+            end
+            StatsUI:NewRow("KnifeReduceRate: " .. FloatColumn(gameRank:call("getKnifeReduceRate")), "Knife Reduce Rate")
             StatsUI:NewRow("")
         end
 
@@ -1081,7 +1146,7 @@ end,
 
                 if Config.StatsUI.Enabled then
                     local hp = playerCtx:call("get_HitPoint")
-                    DrawHP(StatsUI, "Player " .. tostring(i) .. " HP: ", hp, Config.StatsUI.DrawPlayerHPBar, Config.StatsUI.Width, 0)
+                    DrawHP(StatsUI, "Player " .. tostring(i) .. " HP: ", hp, Config.StatsUI.DrawPlayerHPBar, Config.StatsUI.Width, 0, "Player HP Value")
                     if Config.DebugMode then
                         StatsUI:NewRow("    Invincible: " .. tostring(hp:call("get_Invincible")))
                         StatsUI:NewRow("    NoDamage: " .. tostring(hp:call("get_NoDamage")))
@@ -1101,14 +1166,14 @@ end,
         end
 
         if Config.StatsUI.Enabled and masterPlayer ~= nil then
-            StatsUI:NewRow("HateRate: " .. FloatColumn(masterPlayer:call("get_HateRate", nil)))
+            StatsUI:NewRow("HateRate: " .. FloatColumn(masterPlayer:call("get_HateRate", nil)), "Player Hate Rate")
         end
 
         local player = GetPlayerManager()
         if Config.StatsUI.Enabled and player ~= nil then
             -- StatsUI:NewRow("1P HP: " .. FloatColumn(player:call("get_WwisePlayerHPRatio_1P")))
             -- StatsUI:NewRow("2P HP: " .. FloatColumn(player:call("get_WwisePlayerHPRatio_2P")))
-            StatsUI:NewRow("Player Distance: " .. FloatColumn(player:call("get_WwisePlayerDistance")))
+            StatsUI:NewRow("Player Distance: " .. FloatColumn(player:call("get_WwisePlayerDistance")), "Player Distance")
             StatsUI:NewRow("")
         end
 
@@ -1223,8 +1288,8 @@ end,
         -- local combatEnemy = enemy:get_field("_CombatEnemyCollection") -- Hashset<UInt32> -- GUID? pointer?
 
         if Config.EnemyUI.Enabled then
-            EnemyUI:DrawBackground(40)
-            EnemyUI:NewRow("-- Enemy UI --")
+            EnemyUI:DrawBackground(Config.EnemyUI.RowsCount or 40)
+            EnemyUI:NewRow("-- Enemy UI --", "Enemy UI Title")
         end
 
         -- if Config.SearchDelLago then
@@ -1385,6 +1450,7 @@ re.on_draw_ui(function()
 			_, Config.StatsUI.PosX = imgui.drag_int("PosX", Config.StatsUI.PosX, 20, 0, 4000)
 			_, Config.StatsUI.PosY = imgui.drag_int("PosY", Config.StatsUI.PosY, 20, 0, 4000)
 			_, Config.StatsUI.RowHeight = imgui.drag_int("RowHeight", Config.StatsUI.RowHeight, 1, 10, 100)
+			_, Config.StatsUI.RowsCount = imgui.drag_int("RowsCount", Config.StatsUI.RowsCount, 1, 0, 100)
 			_, Config.StatsUI.Width = imgui.drag_int("Width", Config.StatsUI.Width, 1, 10, 1000)
 
 			imgui.tree_pop()
@@ -1405,12 +1471,13 @@ re.on_draw_ui(function()
             configChanged = configChanged or changed
             changed, Config.EnemyUI.FilterUnbreakablePart = imgui.checkbox("Filter Unbreakable Part", Config.EnemyUI.FilterUnbreakablePart)
             configChanged = configChanged or changed
-            changed, Config.EnemyUI.FilterNoInSightEnemy = imgui.checkbox("Filter No In Sight Enemy (disable to show all enemey)", Config.EnemyUI.FilterNoInSightEnemy)
+            changed, Config.EnemyUI.FilterNoInSightEnemy = imgui.checkbox("Filter No In Sight Enemy (disable to show all enemy)", Config.EnemyUI.FilterNoInSightEnemy)
             configChanged = configChanged or changed
 
 			_, Config.EnemyUI.PosX = imgui.drag_int("PosX", Config.EnemyUI.PosX, 20, 0, 4000)
 			_, Config.EnemyUI.PosY = imgui.drag_int("PosY", Config.EnemyUI.PosY, 20, 0, 4000)
 			_, Config.EnemyUI.RowHeight = imgui.drag_int("RowHeight", Config.EnemyUI.RowHeight, 1, 10, 100)
+			_, Config.EnemyUI.RowsCount = imgui.drag_int("RowsCount", Config.EnemyUI.RowsCount, 1, 0, 100)
 			_, Config.EnemyUI.Width = imgui.drag_int("Width", Config.EnemyUI.Width, 1, 10, 1000)
 
 			imgui.tree_pop()
@@ -1443,7 +1510,7 @@ re.on_draw_ui(function()
 			_, Config.FloatingUI.WorldPosOffsetY = imgui.drag_float("World Pos Offset Y", Config.FloatingUI.WorldPosOffsetY, 0.01, -10, 10, "%.2f")
 			_, Config.FloatingUI.WorldPosOffsetZ = imgui.drag_float("World Pos Offset Z", Config.FloatingUI.WorldPosOffsetZ, 0.01, -10, 10, "%.2f")
 
-            imgui.text("\nWorld pos offset in 2d screen")
+            imgui.text("\nPos offset in 2d screen")
 			_, Config.FloatingUI.ScreenPosOffsetX = imgui.drag_int("Screen Pos Offset X", Config.FloatingUI.ScreenPosOffsetX, 1, -4000, 4000)
 			_, Config.FloatingUI.ScreenPosOffsetY = imgui.drag_int("Screen Pos Offset Y", Config.FloatingUI.ScreenPosOffsetY, 1, -4000, 4000)
 
@@ -1493,18 +1560,21 @@ re.on_draw_ui(function()
             -- end
             imgui.text("== SaveSlots (" .. tostring(savesLen) .. ") ==")
             for i = 0, savesLen - 1, 1 do
-                local save = saveDetailList:call("get_Item", i):call("get_SaveFileDetail()")
-
                 imgui.text("----- Slot " .. tostring(i) .. " -----")
 
-                imgui.text("DataCrashed?: " .. tostring(save:call("get_DataCrashed()")))
-                imgui.text(tostring(save:call("get_Slot")) .. ": " .. tostring(save:call("get_SubTitle()")) .. " | " .. tostring(save:call("get_Detail()")))
+                local save = saveDetailList:call("get_Item", i):call("get_SaveFileDetail()")
+                if save ~= nil then
+                    imgui.text("DataCrashed?: " .. tostring(save:call("get_DataCrashed()")))
+                    imgui.text(tostring(save:call("get_Slot")) .. ": " .. tostring(save:call("get_SubTitle()")) .. " | " .. tostring(save:call("get_Detail()")))
 
-                local timestampStr = tostring(save:call("get_LastUpdateTimeStamp"))
+                    local timestampStr = tostring(save:call("get_LastUpdateTimeStamp"))
+                    imgui.text("Last modified timestamp: " .. timestampStr)
+                else
+                    imgui.text("No save data")
+                end
                 -- local timestamp = tonumber(timestampStr:sub(1, #timestampStr - 9))
                 -- imgui.text("Last modified date: " .. os.date("!%Y-%m-%d %H:%M:%S", 1679847024))
-                imgui.text("Last modified timestamp: " .. timestampStr)
-                imgui.text("Clicks " .. tostring(clicks))
+                -- imgui.text("Clicks " .. tostring(clicks))
                 if imgui.button("Save at slot " .. tostring(i)) then
                     clicks = clicks + 1
                     if lastSaveArg ~= nil then
@@ -1515,6 +1585,15 @@ re.on_draw_ui(function()
             end
 
             imgui.pop_font()
+            imgui.tree_pop()
+        end
+
+        if imgui.tree_node("Display Config") then
+            for _, k in pairs(DisplayConfigOrder) do
+            -- for k, v in pairs(Config.DisplayConfig) do
+                changed, Config.DisplayConfig[k] = imgui.checkbox(k, Config.DisplayConfig[k])
+                configChanged = configChanged or changed
+            end
             imgui.tree_pop()
         end
 
