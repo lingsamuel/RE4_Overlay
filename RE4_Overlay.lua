@@ -451,6 +451,7 @@ ItemIDMap[127244800] = { CN = "打击者", EN = "Striker",}
 ItemIDMap[127246400] = { CN = "可爱熊", EN = "Cute Bear",}
 
 local function GetItemName(id)
+    if id == nil then return nil end
     local name = ItemIDMap[id]
     if Config.Language == "CN" and name.CN then
         return name.CN
@@ -647,11 +648,15 @@ end
 -- chainsaw.TimelineEventPlayer play
 
 -- Skip Cutscene Real time render CG
+local currentEventIDNum = 0
+local currentEventID = 0
 local currentTimelineEventWork
 sdk.hook(sdk.find_type_definition("chainsaw.TimelineEventWork"):get_method("play"),
 function (args)
     if not Config.CheatConfig.SkipCG then return end
     currentTimelineEventWork = sdk.to_managed_object(args[2])
+    currentEventIDNum = currentTimelineEventWork:get_field("_EventIDNum")
+    currentEventID = currentTimelineEventWork:get_field("_EventID")
     -- return sdk.PreHookResult.SKIP_ORIGINAL
 end, function(ret)
     if not Config.CheatConfig.SkipCG then return end
@@ -1181,7 +1186,7 @@ local function convertTime(timeInt64)
     end
 end
 
-local lastMainMenuTime = 0
+local lastNewGameTime = 0
 d2d.register(function()
 	initFont()
 end,
@@ -1270,21 +1275,33 @@ end,
             local mapMgr = GetMapManager()
             if mapMgr ~= nil then
                 local sceneID = tostring(mapMgr:call("get_CurrMapSceneID()"))
-                if sceneID == "0" then
-                    lastMainMenuTime = clock:call("get_ActualRecordTime()")
+                if currentEventIDNum == 10157 then -- New Game intro
+                    lastNewGameTime = clock:call("get_ActualRecordTime()")
+                -- else
+                --     lastMainMenuTime = 0
                 end
                 if Config.TesterMode then
+                    StatsUI:NewRow("currentEventIDNum: " .. tostring(currentEventIDNum))
+                    StatsUI:NewRow("currentEventID: " .. tostring(currentEventID))
                     StatsUI:NewRow("SceneID: " .. sceneID)
-                    StatsUI:NewRow("lastMainMenuTime: " .. convertTime(lastMainMenuTime))
+                    -- StatsUI:NewRow("FloorID: " .. mapMgr:call("get_CurrMapFloorID()"))
+                    -- StatsUI:NewRow("PlayerFloorID: " .. mapMgr:call("get_CurrMapPlayerFloorID()"))
+                    -- StatsUI:NewRow("PartnerFloorID: " .. mapMgr:call("get_CurrMapPartnerFloorID"))
+                    StatsUI:NewRow("lastNewGameTime: " .. convertTime(lastNewGameTime))
+                end
+                if sceneID == "0" then
+                    currentEventIDNum = 0
+                    currentEventID = 0
+                    lastNewGameTime = 0
                 end
             end
 
-            StatsUI:NewRow("IGT: " .. convertTime(clock:call("get_ActualRecordTime()") - lastMainMenuTime))
+            StatsUI:NewRow("IGT: " .. convertTime(clock:call("get_ActualRecordTime()") - lastNewGameTime), "IGT")
         end
 
-        if Config.TesterMode then
-            local stats = GetGameStatsManager()
-            if Config.StatsUI.Enabled and stats ~= nil then
+        local stats = GetGameStatsManager()
+        if Config.StatsUI.Enabled and stats ~= nil then
+            if Config.TesterMode then
                 local igtStr = tostring(stats:call("getCalculatingRecordTime()"))
                 local len = #tostring(igtStr)
                 if len <= 1 then
