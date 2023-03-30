@@ -82,6 +82,18 @@ local function GetGameStatsManager()
 	return GameStatsManager
 end
 
+local GameClock = sdk.get_managed_singleton("share.GameClock")
+local function GetGameClock()
+    if GameClock == nil then GameClock = sdk.get_managed_singleton("share.GameClock") end
+	return GameClock
+end
+
+local MapManager = sdk.get_managed_singleton("chainsaw.MapManager")
+local function GetMapManager()
+    if MapManager == nil then MapManager = sdk.get_managed_singleton("chainsaw.MapManager") end
+	return MapManager
+end
+
 local InventoryManager = sdk.get_managed_singleton("chainsaw.InventoryManager")
 local function GetInventoryManager()
     if InventoryManager == nil then InventoryManager = sdk.get_managed_singleton("chainsaw.InventoryManager") end
@@ -302,6 +314,16 @@ if Config.DangerMode == nil then
 	Config.DangerMode = false
 end
 
+if Config.TesterMode then
+    if Config.FixPlayer == nil then
+        Config.FixPlayer = false
+    end
+
+    if Config.FixDelLago == nil then
+        Config.FixDelLago = false
+    end
+end
+
 -- ==== Utils ====
 
 local function FindIndex(table, value)
@@ -505,6 +527,57 @@ if Config.TesterMode then
     end)
 end
 
+local disableCam
+local cameraController
+if Config.TesterMode then
+    sdk.hook(sdk.find_type_definition("chainsaw.VehicleCameraController"):get_method("updateCameraPosition()"),
+    function (args)
+        cameraController = sdk.to_managed_object(args[2])
+        if disableCam then
+            return sdk.PreHookResult.SKIP_ORIGINAL
+        end
+    end, function(ret)
+        return ret
+    end)
+end
+
+-- sdk.hook(sdk.find_type_definition("chainsaw.Ch1f1z0HeadUpdater"):get_method("update()"),
+-- function (args)
+--     local this = sdk.to_managed_object(args[2])
+--     if this:call("get_CharacterKindID") == "ch1_f1z0" then
+--         return sdk.PreHookResult.SKIP_ORIGINAL
+--     end
+-- end, function(ret)
+--     return ret
+-- end)
+
+-- sdk.hook(sdk.find_type_definition("chainsaw.Ch1f1z0BodyUpdater"):get_method("update()"),
+-- function (args)
+--     local this = sdk.to_managed_object(args[2])
+--     if this:call("get_CharacterKindID") == "ch1_f1z0" then
+--         return sdk.PreHookResult.SKIP_ORIGINAL
+--     end
+-- end, function(ret)
+--     return ret
+-- end)
+
+-- sdk.hook(sdk.find_type_definition("chainsaw.TimelineEventActorEnemyCh1f1z0"):get_method("update()"),
+-- function (args)
+--     return sdk.PreHookResult.SKIP_ORIGINAL
+-- end, function(ret)
+--     return ret
+-- end)
+
+-- local disableWaterObstacle
+-- sdk.hook(sdk.find_type_definition("chainsaw.WaterObstacleController"):get_method("onUpdate()"),
+-- function (args)
+--     if disableWaterObstacle then
+--         return sdk.PreHookResult.SKIP_ORIGINAL
+--     end
+-- end, function(ret)
+--     return ret
+-- end)
+
 local lastSaveArg
 sdk.hook(sdk.find_type_definition("share.SaveDataManager"):get_method("requestStartSaveGameDataFlow(System.Int32, share.GameSaveRequestArgs)"),
 function (args)
@@ -604,14 +677,16 @@ end)
 -- via.movie.MovieManager
 -- Fast forward movies to the end to mute audio
 local currentMovie
-sdk.hook(sdk.find_type_definition("via.movie.Movie"):get_method("play"),
-function (args)
-    currentMovie = (args[2])
-    skipMovie(currentMovie)
-end, function(ret)
-    skipMovie(currentMovie)
-    return ret
-end)
+if Config.TesterMode then
+    sdk.hook(sdk.find_type_definition("via.movie.Movie"):get_method("play"),
+    function (args)
+        currentMovie = (args[2])
+        skipMovie(currentMovie)
+    end, function(ret)
+        skipMovie(currentMovie)
+        return ret
+    end)
+end
 
 -- local DisableAttack = true
 sdk.hook(TypedefEnemyAttackPermitManager:get_method("checkAttackPermit(chainsaw.CharacterContext, chainsaw.CharacterContext)"),
@@ -1000,6 +1075,113 @@ local function DisplayEnemyContext(EnemyUI, enemyName, enemyCtx, masterPlayer)
     end
 end
 
+local TypedefTransform = sdk.typeof("via.Transform")
+local TypedefCharacterController = sdk.typeof("via.physics.CharacterController")
+local function GetDelLagoTransform()
+    local sceneMgr = GetSceneManager()
+    if sceneMgr ~= nil then
+        local scene = sdk.call_native_func(sceneMgr, TypeDefSceneManager, "get_CurrentScene")
+        if scene ~= nil then
+            local fishBody = scene:call("findGameObject(System.String)", "ch1f1z0_body")
+            if fishBody ~= nil then
+                local transform = fishBody:call("getComponent(System.Type)", TypedefTransform)
+                if transform ~= nil then
+                   return transform
+                end
+            end
+        end
+    end
+    return transform
+end
+local function GetPlayerTransform()
+    local sceneMgr = GetSceneManager()
+    if sceneMgr ~= nil then
+        local scene = sdk.call_native_func(sceneMgr, TypeDefSceneManager, "get_CurrentScene")
+        if scene ~= nil then
+            local fishBody = scene:call("findGameObject(System.String)", "ch0a0z0_body")
+            if fishBody ~= nil then
+                local transform = fishBody:call("getComponent(System.Type)", TypedefTransform)
+                if transform ~= nil then
+                   return transform
+                end
+            end
+        end
+    end
+    return transform
+end
+
+local transIsNil = false
+local controllerIsNil = false
+local function SetDelLagoPos(pos)
+    local sceneMgr = GetSceneManager()
+    if sceneMgr ~= nil then
+        local scene = sdk.call_native_func(sceneMgr, TypeDefSceneManager, "get_CurrentScene")
+        if scene ~= nil then
+            local fishBody = scene:call("findGameObject(System.String)", "ch1f1z0_body")
+            if fishBody ~= nil then
+                local transform = fishBody:call("getComponent(System.Type)", TypedefTransform)
+                if transform == nil then
+                    transIsNil = true
+                    return nil
+                end
+                local controller = fishBody:call("getComponent(System.Type)", TypedefCharacterController)
+                if controller == nil then
+                    controllerIsNil = true
+                    return nil
+                end
+
+                transIsNil = false
+                controllerIsNil = false
+                controller:call("warp")
+                transform:call("set_Position",pos)
+                controller:call("warp")
+            end
+        end
+    end
+    return transform
+end
+local function SetPlayerPos(pos)
+    local sceneMgr = GetSceneManager()
+    if sceneMgr ~= nil then
+        local scene = sdk.call_native_func(sceneMgr, TypeDefSceneManager, "get_CurrentScene")
+        if scene ~= nil then
+            local fishBody = scene:call("findGameObject(System.String)", "ch0a0z0_body")
+            if fishBody ~= nil then
+                local transform = fishBody:call("getComponent(System.Type)", TypedefTransform)
+                if transform == nil then
+                    transIsNil = true
+                    return nil
+                end
+                local controller = fishBody:call("getComponent(System.Type)", TypedefCharacterController)
+                if controller == nil then
+                    controllerIsNil = true
+                    return nil
+                end
+
+                transIsNil = false
+                controllerIsNil = false
+                controller:call("warp")
+                transform:call("set_Position",pos)
+                controller:call("warp")
+            end
+        end
+    end
+    return transform
+end
+
+local function convertTime(timeInt64)
+    local timeStr = tostring(timeInt64)
+    local len = #tostring(timeStr)
+    if len <= 1 then
+        return 0
+    else
+        local ms = tonumber(timeStr:sub(len - 5, len - 3))
+        local igtSecond = tonumber(timeStr:sub(1, len - 6))
+        return os.date("!%H:%M:%S", igtSecond) .. "." .. tostring(ms)
+    end
+end
+
+local lastMainMenuTime = 0
 d2d.register(function()
 	initFont()
 end,
@@ -1070,30 +1252,62 @@ end,
             StatsUI:NewRow("Last Gacha Item ID: " .. tostring(lastGotChartmID) .. ": " .. tostring(GetItemName(lastGotChartmID)))
         end
 
-        local stats = GetGameStatsManager()
-        if Config.StatsUI.Enabled and stats ~= nil then
-            local igtStr = tostring(stats:call("getCalculatingRecordTime()"))
-            local len = #tostring(igtStr)
-            if len <= 1 then
-                StatsUI:NewRow("IGT: 0", "IGT")
-            else
-                local ms = tonumber(igtStr:sub(len - 5, len - 3))
-                local igtSecond = tonumber(igtStr:sub(1, len - 6))
-                -- StatsUI:NewRow("IGT: " .. tostring(igtStr))
-                StatsUI:NewRow("IGT: " .. os.date("!%H:%M:%S", igtSecond) .. "." .. tostring(ms), "IGT")
-            end
+        local clock = GetGameClock()
+        if clock ~= nil then
             if Config.TesterMode then
-                local timer = GetTimerManager()
-                if timer ~= nil then
-                    StatsUI:NewRow("isOpenTimerStopGui: " .. tostring(timer:call("isOpenTimerStopGui()")))
-                    StatsUI:NewRow("_IsTypeWriterPause: " .. tostring(timer:get_field("_IsTypeWriterPause")))
-                    StatsUI:NewRow("CurrentSecond: " .. tostring(timer:call("get_CurrentSecond()")))
-                    StatsUI:NewRow("OldActualPlayingTime: " .. tostring(timer:get_field("_OldActualPlayingTime")))
+                StatsUI:NewRow("get_SystemElapsedTime: " .. convertTime(clock:call("get_SystemElapsedTime()")))
+                StatsUI:NewRow("get_GameElapsedTime: " .. convertTime(clock:call("get_GameElapsedTime()")))
+                StatsUI:NewRow("get_DemoSpendingTime: " .. convertTime(clock:call("get_DemoSpendingTime()")))
+                StatsUI:NewRow("get_InventorySpendingTime: " .. convertTime(clock:call("get_InventorySpendingTime()")))
+                StatsUI:NewRow("get_PauseSpendingTime: " .. convertTime(clock:call("get_PauseSpendingTime()")))
+                StatsUI:NewRow("get_ActualRecordTime: " .. convertTime(clock:call("get_ActualRecordTime()")))
+                StatsUI:NewRow("get_ActualPlayingTime: " .. convertTime(clock:call("get_ActualPlayingTime()")))
+                StatsUI:NewRow("get_InSceneTime: " .. convertTime(clock:call("get_InSceneTime()")))
+                StatsUI:NewRow("IGT?: " .. convertTime(clock:call("get_GameElapsedTime()") - clock:call("get_PauseSpendingTime")- clock:call("get_DemoSpendingTime")))
+                -- StatsUI:NewRow("get_IsNotClearGameElapsedTime: " .. convertTime(clock:call("get_IsNotClearGameElapsedTime()")))
+            end
+
+            local mapMgr = GetMapManager()
+            if mapMgr ~= nil then
+                local sceneID = tostring(mapMgr:call("get_CurrMapSceneID()"))
+                if sceneID == "0" then
+                    lastMainMenuTime = clock:call("get_ActualRecordTime()")
+                end
+                if Config.TesterMode then
+                    StatsUI:NewRow("SceneID: " .. sceneID)
+                    StatsUI:NewRow("lastMainMenuTime: " .. convertTime(lastMainMenuTime))
                 end
             end
-            -- StatsUI:NewRow("IGT: " .. tostring(stats:call("get_PlaythroughStatsInfo()"):call("outputUIFormat()")))
-            -- StatsUI:NewRow("IGT: " .. tostring(stats:call("get_CurrentCampaignStats()"))) -- nil??
-            -- StatsUI:NewRow("IGT: " .. tostring(stats:call("get_CurrentCampaignStats()"):call("get_Playthrough()"):call("outputUIFormat()")))
+
+            StatsUI:NewRow("IGT: " .. convertTime(clock:call("get_ActualRecordTime()") - lastMainMenuTime))
+        end
+
+        if Config.TesterMode then
+            local stats = GetGameStatsManager()
+            if Config.StatsUI.Enabled and stats ~= nil then
+                local igtStr = tostring(stats:call("getCalculatingRecordTime()"))
+                local len = #tostring(igtStr)
+                if len <= 1 then
+                    StatsUI:NewRow("IGT: 0", "IGT")
+                else
+                    local ms = tonumber(igtStr:sub(len - 5, len - 3))
+                    local igtSecond = tonumber(igtStr:sub(1, len - 6))
+                    -- StatsUI:NewRow("IGT: " .. tostring(igtStr))
+                    StatsUI:NewRow("IGT: " .. os.date("!%H:%M:%S", igtSecond) .. "." .. tostring(ms), "IGT")
+                end
+                if Config.TesterMode then
+                    local timer = GetTimerManager()
+                    if timer ~= nil then
+                        StatsUI:NewRow("isOpenTimerStopGui: " .. tostring(timer:call("isOpenTimerStopGui()")))
+                        StatsUI:NewRow("_IsTypeWriterPause: " .. tostring(timer:get_field("_IsTypeWriterPause")))
+                        StatsUI:NewRow("CurrentSecond: " .. tostring(timer:call("get_CurrentSecond()")))
+                        StatsUI:NewRow("OldActualPlayingTime: " .. tostring(timer:get_field("_OldActualPlayingTime")))
+                    end
+                end
+                -- StatsUI:NewRow("IGT: " .. tostring(stats:call("get_PlaythroughStatsInfo()"):call("outputUIFormat()")))
+                -- StatsUI:NewRow("IGT: " .. tostring(stats:call("get_CurrentCampaignStats()"))) -- nil??
+                -- StatsUI:NewRow("IGT: " .. tostring(stats:call("get_CurrentCampaignStats()"):call("get_Playthrough()"):call("outputUIFormat()")))
+            end
         end
 
         local gameRank = GetGameRankSystem()
@@ -1166,7 +1380,7 @@ end,
         end
 
         if Config.StatsUI.Enabled and masterPlayer ~= nil then
-            StatsUI:NewRow("HateRate: " .. FloatColumn(masterPlayer:call("get_HateRate", nil)), "Player Hate Rate")
+            StatsUI:NewRow("HateRate: " .. FloatColumn(masterPlayer:call("get_HateRate")), "Player Hate Rate")
         end
 
         local player = GetPlayerManager()
@@ -1293,37 +1507,68 @@ end,
         end
 
         -- if Config.SearchDelLago then
-        --     local sceneMgr = GetSceneManager()
-        --     if sceneMgr ~= nil then
-        --         local scene = sdk.call_native_func(sceneMgr, TypeDefSceneManager, "get_CurrentScene")
-        --         if scene ~= nil then
-        --             -- StatsUI:NewRow("SceneName: " .. tostring(scene:call("get_Name")))
-        --             -- 湖主：1f1z0 不在 enemy list 里
-        --             local fishBody = scene:call("findGameObject(System.String)", "ch1f1z0_body")
-        --             if fishBody ~= nil then
-        --                 local updater = fishBody:call("getComponent(System.Type)", sdk.typeof("chainsaw.Ch1f1z0BodyUpdater"))
-        --                 if updater ~= nil then
-        --                     local context = updater:call("get_Context")
-        --                     if context ~= nil then
-        --                         DisplayEnemyContext(EnemyUI, "Del Lago", context, masterPlayer)
-        --                         -- local hp = context:call("get_HitPoint")
-        --                         -- DrawHP(EnemyUI, "Del Lago HP: ", hp, Config.EnemyUI.DrawEnemyHPBar, Config.EnemyUI.Width, 0)
-        --                     else
-        --                         -- EnemyUI:NewRow("ctx is nil")
-        --                     end
-        --                 else
-        --                     -- EnemyUI:NewRow("updater is nil ")
-        --                 end
-        --                 --     local comps = fishBody:call("get_Components")
-        --                 --     StatsUI:NewRow("Fish: " .. tostring(comps:call("get_Count")))
-        --                 --     local len = comps:call("get_Count")
-        --                 --     for i = 0, len - 1, 1 do
-        --                 --         local comp = comps:call("get_Item", i)
-        --                 --         StatsUI:NewRow("Fish: " .. tostring(comp:call("ToString")))
-        --                 --     end
-        --             end
-        --         end
-        --     end
+            -- local sceneMgr = GetSceneManager()
+            -- if sceneMgr ~= nil then
+            --     local scene = sdk.call_native_func(sceneMgr, TypeDefSceneManager, "get_CurrentScene")
+            --     if scene ~= nil then
+            --         -- StatsUI:NewRow("SceneName: " .. tostring(scene:call("get_Name")))
+            --         -- 湖主：1f1z0 不在 enemy list 里
+            --         local fishBody = scene:call("findGameObject(System.String)", "ch1f1z0_body")
+            --         if fishBody ~= nil then
+            --             -- local updater = fishBody:call("getComponent(System.Type)", sdk.typeof("chainsaw.Ch1f1z0BodyUpdater"))
+            --             -- if updater ~= nil then
+            --             --     local context = updater:call("get_Context")
+            --             --     if context ~= nil then
+            --             --         DisplayEnemyContext(EnemyUI, "Del Lago", context, masterPlayer)
+            --             --         -- local hp = context:call("get_HitPoint")
+            --             --         -- DrawHP(EnemyUI, "Del Lago HP: ", hp, Config.EnemyUI.DrawEnemyHPBar, Config.EnemyUI.Width, 0)
+            --             --     else
+            --             --         -- EnemyUI:NewRow("ctx is nil")
+            --             --     end
+            --             -- else
+            --             --     -- EnemyUI:NewRow("updater is nil ")
+            --             -- end
+            --             local comps = fishBody:call("get_Components")
+            --             StatsUI:NewRow("Fish: " .. tostring(comps:call("get_Count")))
+            --             local len = comps:call("get_Count")
+            --             for i = 0, len - 1, 1 do
+            --                 local comp = comps:call("get_Item", i)
+            --                 StatsUI:NewRow("Fish: " .. tostring(comp:call("ToString")))
+            --             end
+            --         end
+            --     end
+            -- end
+        -- end
+        -- if Config.SearchDelLago then
+            -- local sceneMgr = GetSceneManager()
+            -- if sceneMgr ~= nil then
+            --     local scene = sdk.call_native_func(sceneMgr, TypeDefSceneManager, "get_CurrentScene")
+            --     if scene ~= nil then
+            --         local playerBody = scene:call("findGameObject(System.String)", "ch0a0z0_body")
+            --         if playerBody ~= nil then
+            --             -- local updater = fishBody:call("getComponent(System.Type)", sdk.typeof("chainsaw.Ch1f1z0BodyUpdater"))
+            --             -- if updater ~= nil then
+            --             --     local context = updater:call("get_Context")
+            --             --     if context ~= nil then
+            --             --         DisplayEnemyContext(EnemyUI, "Del Lago", context, masterPlayer)
+            --             --         -- local hp = context:call("get_HitPoint")
+            --             --         -- DrawHP(EnemyUI, "Del Lago HP: ", hp, Config.EnemyUI.DrawEnemyHPBar, Config.EnemyUI.Width, 0)
+            --             --     else
+            --             --         -- EnemyUI:NewRow("ctx is nil")
+            --             --     end
+            --             -- else
+            --             --     -- EnemyUI:NewRow("updater is nil ")
+            --             -- end
+            --             local comps = playerBody:call("get_Components")
+            --             StatsUI:NewRow("Player: " .. tostring(comps:call("get_Count")))
+            --             local len = comps:call("get_Count")
+            --             for i = 0, len - 1, 1 do
+            --                 local comp = comps:call("get_Item", i)
+            --                 StatsUI:NewRow("Player: " .. tostring(comp:call("ToString")))
+            --             end
+            --         end
+            --     end
+            -- end
         -- end
 
         local enemy = GetEnemyManager()
@@ -1358,6 +1603,8 @@ end,
 	end
 )
 
+local delLagoNoClipPos = Vector3f.new(0.0, 0.0, 0.0)
+local playerNoClipPos = Vector3f.new(0.0, 0.0, 0.0)
 -- === Menu ===
 local clicks = 0
 re.on_draw_ui(function()
@@ -1606,6 +1853,34 @@ re.on_draw_ui(function()
 		changed, Config.DangerMode = imgui.checkbox("DangerMode (dev only, untested, undocumented and unstable functionalities)", Config.DangerMode)
 		configChanged = configChanged or changed
 
+        if Config.TesterMode then
+            if imgui.tree_node("Del Lago Test") then
+                _, Config.FixDelLago = imgui.checkbox("FixDelLago", Config.FixDelLago)
+
+                local delLagoTransform = GetDelLagoTransform()
+                if delLagoTransform ~= nil then
+                    delLagoNoClipPos = delLagoTransform:call("get_Position")
+                end
+
+                changed, delLagoNoClipPos = imgui.drag_float3("Del Lago No Clip Position", delLagoNoClipPos, 0.15 ,-100000000.0, 100000000.0)
+                -- imgui.text("trans "..tostring(transIsNil) .. " | contr " .. tostring(controllerIsNil))
+
+                _, Config.FixPlayer = imgui.checkbox("FixPlayer", Config.FixPlayer)
+                local playerTransform = GetPlayerTransform()
+                if playerTransform ~= nil then
+                    if playerNoClipPos == nil or playerNoClipPos == Vector3f.new(0.0, 0.0, 0.0) then
+                        playerNoClipPos = playerTransform:call("get_Position")
+                    end
+                end
+                changed, playerNoClipPos = imgui.drag_float3("Player No Clip Position", playerNoClipPos, 0.15 ,-100000000.0, 100000000.0)
+
+                _, disableCam = imgui.checkbox("disableCam", disableCam)
+                -- _, disableWaterObstacle = imgui.checkbox("disableWaterObstacle", disableWaterObstacle)
+
+                imgui.tree_pop()
+            end
+        end
+
         imgui.tree_pop()
 
         if configChanged then
@@ -1613,6 +1888,23 @@ re.on_draw_ui(function()
         end
     end
 end)
+
+if Config.TesterMode then
+    re.on_frame(function()
+        if Config.TesterMode then
+            if Config.FixDelLago then
+                if delLagoNoClipPos ~= nil then
+                    SetDelLagoPos(delLagoNoClipPos)
+                end
+            end
+            if Config.FixPlayer then
+                if playerNoClipPos ~= nil then
+                    SetPlayerPos(playerNoClipPos)
+                end
+            end
+        end
+    end)
+end
 
 re.on_config_save(function()
 	json.dump_file("RE4_Overlay/RE4_Overlay.json", Config)
