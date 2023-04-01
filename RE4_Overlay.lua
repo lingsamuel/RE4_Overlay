@@ -264,7 +264,8 @@ local DisplayConfigOrder = {
     "Player HP Value",
     "Player Hate Rate",
     "Player Distance",
-
+    ----
+    "Armory Info",
     ----
     "Enemy UI Title",
     "Enemy Name",
@@ -1504,6 +1505,123 @@ end,
             -- StatsUI:NewRow("2P HP: " .. FloatColumn(player:call("get_WwisePlayerHPRatio_2P")))
             StatsUI:NewRow("Player Distance: " .. FloatColumn(player:call("get_WwisePlayerDistance")), "Player Distance")
             StatsUI:NewRow("")
+        end
+
+        local sceneMgr = GetSceneManager()
+        if sceneMgr and Config.StatsUI.Enabled then
+            local scene = sdk.call_native_func(sceneMgr, TypeDefSceneManager, "get_CurrentScene")
+            if scene and Config.DisplayConfig["Armory Info"] then
+                -- TODO: Current Weapon
+                StatsUI:NewRow("-- Armory --")
+                local lastWeaponID = "4003"
+                local lastWeaponItemID = "4003"
+                local playerBody = scene:call("findGameObject(System.String)", "ch0a0z0_body")
+                if playerBody then
+                    local eventActorPlayer = playerBody:call("getComponent(System.Type)", sdk.typeof("chainsaw.TimelineEventActorPlayer"))
+                    if eventActorPlayer then
+                        local playerHeadUpdater = eventActorPlayer:call("getPlayerHeader")
+                        if playerHeadUpdater then
+                            local playerEqiupment = playerHeadUpdater:call("get_Equipment")
+                            if playerEqiupment then
+                                lastWeaponID = playerEqiupment:get_field("<LastEquipWeaponID>k__BackingField")
+                                StatsUI:NewRow("WeaponID: ".. tostring(lastWeaponID))
+
+                                local lastWeaponItem = playerEqiupment:call("getEquipWeaponItem")
+                                if lastWeaponItem then
+                                    lastWeaponItemID = lastWeaponItem:call("get_WeaponId")
+                                    StatsUI:NewRow("WeaponItemID: ".. tostring(lastWeaponItemID))
+                                end
+
+                                local armorInfo = {
+                                    existing = false,
+                                    durability = 0
+                                }
+                                armorInfo.existing = playerEqiupment:call("existsArmor")
+                                armorInfo.durability = playerEqiupment:call("getArmorDurabilityProportion")
+                                StatsUI:NewRow("Armor:"..tostring(armorInfo.existsArmor)..FloatColumn(armorInfo.durability))
+                            end
+                        end
+                    end
+                end
+                
+                local weaponObj = scene:call("findGameObject(System.String)", "wp"..lastWeaponItemID)
+	            local WeaponCustomCatalog = scene:call("findGameObject(System.String)", "WeaponCustomCatalog")
+	            local PlayerInventoryObserver = scene:call("findGameObject(System.String)", "PlayerInventoryObserver")
+
+                if weaponObj then
+                    local lastWeapon = weaponObj:call("getComponent(System.Type)", sdk.typeof("chainsaw.Gun"))
+
+                    if lastWeapon then
+                        local lastWeaponShellGen = lastWeapon:get_field("<ShellGenerator>k__BackingField")
+                        local lastWeaponParams = lastWeapon:get_field("WeaponStructureParam")
+			            local lastWeaponThinkPlayerParam = lastWeapon:get_field("<ThinkPlayerParam>k__BackingField")
+			            local lastWeaponFocus = lastWeapon:get_field("<ReticleFitParam>k__BackingField") 
+
+                        if lastWeaponShellGen then
+                        -- TODO:
+                            local lastWeaponShellGenUserData = lastWeaponShellGen:get_field("_UserData")
+                            if lastWeaponShellGenUserData then 
+                                local lastWeaponShellGenUserDataInfo = lastWeaponShellGenUserData:get_field("_ShellInfoUserData")
+					
+					            if lastWeaponShellGenUserDataInfo then
+						            local lastWeaponShellGenUserDataInfo_Life = lastWeaponShellGenUserDataInfo:get_field("_LifeInfo")
+						            local lastWeaponShellGenUserDataInfo_Move = lastWeaponShellGenUserDataInfo:get_field("_MoveInfo")
+						            local lastWeaponShellGenUserDataInfo_Attack = lastWeaponShellGenUserDataInfo:get_field("_AttackInfo")
+						
+						            if lastWeaponShellGenUserDataInfo_Life then
+							            --log.info("Got BT_ShellGenUserData_INFO_Life")	--IDK why I grabbed this I have no clue what these values do.
+						            end
+						
+						            if lastWeaponShellGenUserDataInfo_Move then
+                                        StatsUI:NewRow("_Speed: "..FloatColumn(lastWeaponShellGenUserDataInfo_Move:get_field("_Speed")))
+                                        StatsUI:NewRow("_Gravity: "..FloatColumn(lastWeaponShellGenUserDataInfo_Move:get_field("_Gravity")))
+                                        StatsUI:NewRow("_IgnoreGravityDistance: "..FloatColumn(lastWeaponShellGenUserDataInfo_Move:get_field("_IgnoreGravityDistance")))
+						            end
+						
+						            if lastWeaponShellGenUserDataInfo_Attack then
+							            local lastWeaponShellGenUserDataInfo_Attack_DamageRate = lastWeaponShellGenUserDataInfo_Attack:get_field("_DamageRate")
+							            local lastWeaponShellGenUserDataInfo_Attack_WinceRate = lastWeaponShellGenUserDataInfo_Attack:get_field("_WinceRate")
+							            local lastWeaponShellGenUserDataInfo_Attack_BreakRate = lastWeaponShellGenUserDataInfo_Attack:get_field("_BreakRate")
+							            local lastWeaponShellGenUserDataInfo_Attack_StopRate = lastWeaponShellGenUserDataInfo_Attack:get_field("_StoppingRate")
+							            
+                                        StatsUI:NewRow("_ColliderRadius: "..FloatColumn(lastWeaponShellGenUserDataInfo_Attack:get_field("_ColliderRadius")))
+                                        StatsUI:NewRow("_CriticalRate: "..FloatColumn(lastWeaponShellGenUserDataInfo_Attack:get_field("_CriticalRate")))
+                                        StatsUI:NewRow("_CriticalRate_EX: "..FloatColumn(lastWeaponShellGenUserDataInfo_Attack:get_field("_CriticalRate_Fit")))
+							
+							            if lastWeaponShellGenUserDataInfo_Attack_DamageRate then
+                                            StatsUI:NewRow("DamageRate: "..FloatColumn(lastWeaponShellGenUserDataInfo_Attack_DamageRate:get_field("_BaseValue")))
+							            end
+							            if lastWeaponShellGenUserDataInfo_Attack_WinceRate then
+                                            StatsUI:NewRow("WinceRate: "..FloatColumn(lastWeaponShellGenUserDataInfo_Attack_WinceRate:get_field("_BaseValue")))
+							            end
+							            if lastWeaponShellGenUserDataInfo_Attack_BreakRate then
+                                            StatsUI:NewRow("BreakRate: "..FloatColumn(lastWeaponShellGenUserDataInfo_Attack_BreakRate:get_field("_BaseValue")))
+							            end
+							            if lastWeaponShellGenUserDataInfo_Attack_StopRate then
+                                            StatsUI:NewRow("StopRate: "..FloatColumn(lastWeaponShellGenUserDataInfo_Attack_StopRate:get_field("_BaseValue")))
+							            end
+						            end
+					            end
+                            end
+                        end
+                        
+                        if lastWeaponParams then
+                            StatsUI:NewRow("TypeOfReload: "..FloatColumn(lastWeaponParams:get_field("TypeOfReload")))
+                            StatsUI:NewRow("TypeOfShoot: "..FloatColumn(lastWeaponParams:get_field("TypeOfShoot")))
+                            StatsUI:NewRow("ReloadNum: "..FloatColumn(lastWeaponParams:get_field("ReloadNum")))
+                            StatsUI:NewRow("_ReloadSpeedRate: "..FloatColumn(lastWeaponParams:get_field("_ReloadSpeedRate")))
+                            StatsUI:NewRow("_RapidSpeed: "..FloatColumn(lastWeaponParams:get_field("_RapidSpeed")))
+                            StatsUI:NewRow("_RapidBaseFrame: "..FloatColumn(lastWeaponParams:get_field("_RapidBaseFrame")))
+                            StatsUI:NewRow("_PumpActionRapidSpeed: "..FloatColumn(lastWeaponParams:get_field("_PumpActionRapidSpeed")))
+			            end
+
+                        if lastWeaponThinkPlayerParam then
+                            StatsUI:NewRow("RangeDistance: "..FloatColumn(lastWeaponThinkPlayerParam:get_field("RangeDistance")))
+			            end
+                    end
+                end
+                StatsUI:NewRow("")
+            end
         end
 
         if Config.TesterMode then
