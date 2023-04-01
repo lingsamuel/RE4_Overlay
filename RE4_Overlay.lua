@@ -450,13 +450,17 @@ ItemIDMap[127243200] = { CN = "光明教徽", EN = "Iluminados Emblem",}
 ItemIDMap[127244800] = { CN = "打击者", EN = "Striker",}
 ItemIDMap[127246400] = { CN = "可爱熊", EN = "Cute Bear",}
 
+ItemIDMap[119275200] = { CN = "钥匙串（华丽钥匙）", EN = "Bunch of Keys (Ashley)", }
+ItemIDMap[119238400] = { CN = "路易斯的钥匙", EN = "", }
+ItemIDMap[119276800] = { CN = "立方雕", EN = "", }
+
 local function GetItemName(id)
-    if id == nil then return nil end
+    if id == nil then return "" end
     local name = ItemIDMap[id]
-    if Config.Language == "CN" and name.CN then
+    if Config.Language == "CN" and name.CN ~= nil and name.CN ~= "" then
         return name.CN
     end
-    if name.EN then
+    if name.EN ~= nil and name.EN ~= "" then
         return name.EN
     end
     return name
@@ -653,10 +657,15 @@ local currentEventID = 0
 local currentTimelineEventWork
 sdk.hook(sdk.find_type_definition("chainsaw.TimelineEventWork"):get_method("play"),
 function (args)
-    if not Config.CheatConfig.SkipCG then return end
+    -- if not Config.CheatConfig.SkipCG then return end
     currentTimelineEventWork = sdk.to_managed_object(args[2])
-    currentEventIDNum = currentTimelineEventWork:get_field("_EventIDNum")
-    currentEventID = currentTimelineEventWork:get_field("_EventID")
+    if currentTimelineEventWork ~= nil then
+        currentEventIDNum = currentTimelineEventWork:get_field("_EventIDNum")
+        currentEventID = currentTimelineEventWork:get_field("_EventID")
+    else
+        currentEventIDNum = -1
+        currentEventID = -1
+    end
     -- return sdk.PreHookResult.SKIP_ORIGINAL
 end, function(ret)
     if not Config.CheatConfig.SkipCG then return end
@@ -665,13 +674,41 @@ end, function(ret)
 end)
 
 -- Skip Radio Message
+-- local thisRadioMsgManager
+-- local radioMsgEvent
+-- sdk.hook(sdk.find_type_definition("chainsaw.RadioMsgManager"):get_method("trgRadioMsgEvent(chainsaw.RadioMsgEvent)"),
+-- function (args)
+--     if not Config.CheatConfig.SkipRadio then return end
+--     thisRadioMsgManager = sdk.to_managed_object(args[2])
+--     radioMsgEvent = sdk.to_int64(args[3])
+--     -- return sdk.PreHookResult.SKIP_ORIGINAL
+-- end, function(ret)
+--     if not Config.CheatConfig.SkipRadio then return end
+--     -- thisRadioMsgManager:call("skipRadio")
+--     -- thisRadioMsgManager:call("endRadio")
+--     return ret
+-- end)
+
+-- sdk.hook(sdk.find_type_definition("chainsaw.RadioMovieWork"):get_method("requestLoadMovie(chainsaw.RadioMsgMovieID)"),
+-- function (args)
+--     if not Config.CheatConfig.SkipRadio then return end
+--     return sdk.PreHookResult.SKIP_ORIGINAL
+-- end, function(ret)
+--     if not Config.CheatConfig.SkipRadio then return end
+--     return ret
+-- end)
+
+-- Skip Radio Message
 local currentMovieLoader
 local currentMovieID
+local currentMovieCallback
 sdk.hook(sdk.find_type_definition("chainsaw.GuiMovieLoaderBase"):get_method("setupMovie(System.Int32, System.Action`1<System.Boolean>)"),
 function (args)
     if not Config.CheatConfig.SkipRadio then return end
     currentMovieLoader = sdk.to_managed_object(args[2])
     currentMovieID = sdk.to_int64(args[3]) & 0xFFFFFFFF
+    -- currentMovieID = sdk.to_int64(args[3])
+    currentMovieCallback = sdk.to_managed_object(args[4])
     return sdk.PreHookResult.SKIP_ORIGINAL
 end, function(ret)
     if not Config.CheatConfig.SkipRadio then return end
@@ -709,6 +746,27 @@ end, function (retval)
 end)
 
 local countTable = {}
+
+local keyItemInventory
+local lastHoverKeyItemID
+local lastHoverKeyItemGuid
+local lastHoverKeyItem
+if Config.TesterMode then
+    sdk.hook(sdk.find_type_definition("chainsaw.gui.keyitem.KeyItemInventory"):get_method("getItemId(System.Guid)"),
+    function (args)
+        keyItemInventory = sdk.to_managed_object(args[2])
+        lastHoverKeyItemGuid = sdk.to_int64(args[3])
+    end, function (retval)
+        if retval == nil then
+        else
+            lastHoverKeyItemID = sdk.to_int64(retval)
+            if keyItemInventory ~= nil and lastHoverKeyItemGuid ~= nil then
+                lastHoverKeyItem = keyItemInventory:call("getInventoryItem(System.Guid)", lastHoverKeyItemGuid)
+            end
+        end
+        return retval
+    end)
+end
 
 local lastHoverItemID
 sdk.hook(sdk.find_type_definition("chainsaw.gui.inventory.CsInventory"):get_method("getItem(chainsaw.InventorySlotType, chainsaw.CsSlotIndex)"),
@@ -916,7 +974,7 @@ local function DisplayEnemyContext(EnemyUI, enemyName, enemyCtx, masterPlayer)
     local combatReady = enemyCtx:call("get_IsCombatReady")
     if Config.DebugMode then
         -- kind
-        EnemyUI:NewRow(" KindID: ".. tostring(kindID) .. "/" .. kind)
+        EnemyUI:NewRow(" KindID: ".. tostring(kindID) .. "/" .. tostring(kind))
         EnemyUI:NewRow(" Lively: ".. tostring(lively))
         EnemyUI:NewRow(" IsCombatReady: ".. tostring(combatReady))
     end
@@ -948,72 +1006,74 @@ local function DisplayEnemyContext(EnemyUI, enemyName, enemyCtx, masterPlayer)
 
         local playerPos = masterPlayer:call("get_Position")
         local worldPos = enemyCtx:call("get_Position")
-        local delta = playerPos - worldPos
-        local distance = math.sqrt(delta.x * delta.x + delta.y * delta.y)
+        if playerPos ~= nil and worldPos ~= nil then
+            local delta = playerPos - worldPos
+            local distance = math.sqrt(delta.x * delta.x + delta.y * delta.y)
 
-        if Config.FloatingUI.FilterMaxHPEnemy and currentHP >= maxHP then
-            allowFloating = false
-        end
-
-        if distance > Config.FloatingUI.MaxDistance then
-            if Config.FloatingUI.IgnoreDistanceIfDamaged and currentHP < maxHP then
-                allowFloating = true
-            else
+            if Config.FloatingUI.FilterMaxHPEnemy and currentHP >= maxHP then
                 allowFloating = false
             end
-        end
 
-        if Config.FloatingUI.FilterBlockedEnemy then
-            allowFloating = allowFloating and enemyCtx:call("get_HasRayToPlayer")
-        end
-
-        if Config.DebugMode then
-            EnemyUI:NewRow(" Distance: ".. FloatColumn(distance))
-        end
-
-        if allowFloating then
-            local height = Config.FloatingUI.Height
-            local width = Config.FloatingUI.Width
-
-            local scale = (Config.FloatingUI.MaxDistance - distance) / Config.FloatingUI.MaxDistance
             if distance > Config.FloatingUI.MaxDistance then
-                scale = Config.FloatingUI.IgnoreDistanceIfDamagedScale
+                if Config.FloatingUI.IgnoreDistanceIfDamaged and currentHP < maxHP then
+                    allowFloating = true
+                else
+                    allowFloating = false
+                end
             end
-            if scale < Config.FloatingUI.MinScale then
-                scale = Config.FloatingUI.MinScale
-            end
-            if Config.FloatingUI.ScaleHeightByDistance then
-                height = height * scale
-            end
-            if Config.FloatingUI.ScaleWidthByDistance then
-                width = width * scale
+
+            if Config.FloatingUI.FilterBlockedEnemy then
+                allowFloating = allowFloating and enemyCtx:call("get_HasRayToPlayer")
             end
 
             if Config.DebugMode then
-                EnemyUI:NewRow(" Bar Scale: ".. FloatColumn(scale))
+                EnemyUI:NewRow(" Distance: ".. FloatColumn(distance))
             end
 
-            worldPos.x = worldPos.x + Config.FloatingUI.WorldPosOffsetX
-            worldPos.y = worldPos.y + Config.FloatingUI.WorldPosOffsetY
-            worldPos.z = worldPos.z + Config.FloatingUI.WorldPosOffsetZ
-            local screenPos = draw.world_to_screen(worldPos)
+            if allowFloating then
+                local height = Config.FloatingUI.Height
+                local width = Config.FloatingUI.Width
 
-            if screenPos ~= nil then
-                local floatingX = screenPos.x + Config.FloatingUI.ScreenPosOffsetX
-                local floatingY = screenPos.y + Config.FloatingUI.ScreenPosOffsetY
-                if Config.FloatingUI.DisplayNumber then
-                    local hpMsg = "HP: " .. tostring(currentHP) .. "/" .. tostring(maxHP)
-                    if Config.TesterMode then
-                        hpMsg = hpMsg .. " / " .. tostring(enemyCtx:call("get_ItemDropCount"))
-                    end
-                    d2d.text(initFont(Config.FloatingUI.FontSize), hpMsg, floatingX, floatingY - 24, 0xFFFFFFFF)
+                local scale = (Config.FloatingUI.MaxDistance - distance) / Config.FloatingUI.MaxDistance
+                if distance > Config.FloatingUI.MaxDistance then
+                    scale = Config.FloatingUI.IgnoreDistanceIfDamagedScale
                 end
-                d2d.fill_rect(floatingX - 1, floatingY - 1, width + 2, height + 2, 0xFF000000)
-                d2d.fill_rect(floatingX, floatingY, width, height, 0xFFCCCCCC)
-                d2d.fill_rect(floatingX, floatingY, currentHP / maxHP * width, height, 0xFF5c9e76)
-            end
-        end
+                if scale < Config.FloatingUI.MinScale then
+                    scale = Config.FloatingUI.MinScale
+                end
+                if Config.FloatingUI.ScaleHeightByDistance then
+                    height = height * scale
+                end
+                if Config.FloatingUI.ScaleWidthByDistance then
+                    width = width * scale
+                end
 
+                if Config.DebugMode then
+                    EnemyUI:NewRow(" Bar Scale: ".. FloatColumn(scale))
+                end
+
+                worldPos.x = worldPos.x + Config.FloatingUI.WorldPosOffsetX
+                worldPos.y = worldPos.y + Config.FloatingUI.WorldPosOffsetY
+                worldPos.z = worldPos.z + Config.FloatingUI.WorldPosOffsetZ
+                local screenPos = draw.world_to_screen(worldPos)
+
+                if screenPos ~= nil then
+                    local floatingX = screenPos.x + Config.FloatingUI.ScreenPosOffsetX
+                    local floatingY = screenPos.y + Config.FloatingUI.ScreenPosOffsetY
+                    if Config.FloatingUI.DisplayNumber then
+                        local hpMsg = "HP: " .. tostring(currentHP) .. "/" .. tostring(maxHP)
+                        if Config.TesterMode then
+                            hpMsg = hpMsg .. " / " .. tostring(enemyCtx:call("get_ItemDropCount"))
+                        end
+                        d2d.text(initFont(Config.FloatingUI.FontSize), hpMsg, floatingX, floatingY - 24, 0xFFFFFFFF)
+                    end
+                    d2d.fill_rect(floatingX - 1, floatingY - 1, width + 2, height + 2, 0xFF000000)
+                    d2d.fill_rect(floatingX, floatingY, width, height, 0xFFCCCCCC)
+                    d2d.fill_rect(floatingX, floatingY, currentHP / maxHP * width, height, 0xFF5c9e76)
+                end
+            end
+
+        end
     end
 
     -- Enemy UI Panel
@@ -1033,7 +1093,7 @@ local function DisplayEnemyContext(EnemyUI, enemyName, enemyCtx, masterPlayer)
 
         -- add rank
         local addRank = enemyCtx:call("get_GameRankAdd")
-        if addRank ~= 0 then
+        if addRank ~= nil and addRank ~= 0 then
             EnemyUI:NewRow(" GameRankAdd: " .. tostring(addRank), "Enemy Game Rank Add")
         end
 
@@ -1042,30 +1102,34 @@ local function DisplayEnemyContext(EnemyUI, enemyName, enemyCtx, masterPlayer)
         if partsDict ~= nil then
             local parts = partsDict:get_field('_entries')
 
-            local j = 0
-            for _,k in pairs(parts) do
-                local key = k:get_field('key')
-                local bodyParts = key:get_field("Item1")
-                local bodyPartsSide = key:get_field("Item2")
-                local partHP = k:get_field('value')
-                if partHP ~= nil then
-                    local partCurrentHP = partHP:call("get_CurrentHitPoint")
-                    local partMaxHP = partHP:call("get_DefaultHitPoint")
+            if parts ~= nil then
+                local j = 0
+                for _, k in pairs(parts) do
+                    local key = k:get_field('key')
+                    if key ~= nil then
+                        local bodyParts = key:get_field("Item1")
+                        local bodyPartsSide = key:get_field("Item2")
+                        local partHP = k:get_field('value')
+                        if bodyParts ~= nil and bodyPartsSide ~= nil and partHP ~= nil then
+                            local partCurrentHP = partHP:call("get_CurrentHitPoint")
+                            local partMaxHP = partHP:call("get_DefaultHitPoint")
 
-                    local allow = true
-                    if Config.EnemyUI.FilterMaxHPPart then
-                        allow = allow and partCurrentHP < partMaxHP
-                    end
-                    if Config.EnemyUI.FilterUnbreakablePart then
-                        allow = allow and partMaxHP < maxHP
-                    end
-                    if allow then
-                        if Config.EnemyUI.DisplayPartHP then
-                            DrawHP(EnemyUI, "  " .. BodyPartsMap[bodyParts] .. "("  .. BodyPartsSideMap[bodyPartsSide] .. "): ", partHP, Config.EnemyUI.DrawPartHPBar, Config.EnemyUI.Width, 20, "Enemy Part HP Value")
+                            local allow = true
+                            if Config.EnemyUI.FilterMaxHPPart then
+                                allow = allow and partCurrentHP < partMaxHP
+                            end
+                            if Config.EnemyUI.FilterUnbreakablePart then
+                                allow = allow and partMaxHP < maxHP
+                            end
+                            if allow then
+                                if Config.EnemyUI.DisplayPartHP then
+                                    DrawHP(EnemyUI, "  " .. tostring(BodyPartsMap[bodyParts]) .. "("  .. tostring(BodyPartsSideMap[bodyPartsSide]) .. "): ", partHP, Config.EnemyUI.DrawPartHPBar, Config.EnemyUI.Width, 20, "Enemy Part HP Value")
+                                end
+                            end
                         end
                     end
+                    j = j + 1
                 end
-                j = j + 1
             end
         end
 
@@ -1103,9 +1167,9 @@ local function GetPlayerTransform()
     if sceneMgr ~= nil then
         local scene = sdk.call_native_func(sceneMgr, TypeDefSceneManager, "get_CurrentScene")
         if scene ~= nil then
-            local fishBody = scene:call("findGameObject(System.String)", "ch0a0z0_body")
-            if fishBody ~= nil then
-                local transform = fishBody:call("getComponent(System.Type)", TypedefTransform)
+            local playerBody = scene:call("findGameObject(System.String)", "ch0a0z0_body")
+            if playerBody ~= nil then
+                local transform = playerBody:call("getComponent(System.Type)", TypedefTransform)
                 if transform ~= nil then
                    return transform
                 end
@@ -1175,6 +1239,8 @@ local function SetPlayerPos(pos)
 end
 
 local function convertTime(timeInt64)
+    if timeInt64 == nil then return "nil" end
+
     local timeStr = tostring(timeInt64)
     local len = #tostring(timeStr)
     if len <= 1 then
@@ -1186,6 +1252,33 @@ local function convertTime(timeInt64)
     end
 end
 
+local function DisplayItem(ui, item)
+    if item ~= nil then
+        local def = item:call("get__ItemDefine")
+        if def ~= nil then
+            ui:NewRow("Def._ItemSize: " .. tostring(def:get_field("_ItemSize")))
+            ui:NewRow("Def._StackMax: " .. tostring(def:get_field("_StackMax")))
+            ui:NewRow("Def._DefaultDurabilityMax: " .. tostring(def:get_field("_DefaultDurabilityMax")))
+            ui:NewRow("Def._UseResults: " .. tostring(def:get_field("_UseResults"):call("get_Count")))
+            local equipReq = def:get_field("_EquipRequirement")
+            if equipReq ~= nil then
+                ui:NewRow("Def.ER._EquipableTarget: " .. tostring(equipReq:get_field("_EquipableTarget")))
+            end
+            local addReq = def:get_field("_AdditionalRequirement")
+            if addReq ~= nil then
+                ui:NewRow("Def.AR._DedicatedTarget: " .. tostring(addReq:get_field("_DedicatedTarget")))
+            end
+        end
+        ui:NewRow("_ID: " .. tostring(item:get_field("_ID"):call("ToString()")))
+        ui:NewRow("_ItemId: " .. tostring(item:get_field("_ItemId")))
+        ui:NewRow("_CurrentCondition: " .. tostring(item:get_field("_CurrentCondition")))
+        ui:NewRow("_CurrentDurability: " .. tostring(item:get_field("_CurrentDurability")))
+        ui:NewRow("_CurrentItemCount: " .. tostring(item:get_field("_CurrentItemCount")))
+        ui:NewRow("get_IsValid: " .. tostring(item:call("get_IsValid")))
+    end
+end
+
+local lastAddItem
 local lastNewGameTime = 0
 d2d.register(function()
 	initFont()
@@ -1255,6 +1348,10 @@ end,
             --     end
             -- end
             StatsUI:NewRow("Last Gacha Item ID: " .. tostring(lastGotChartmID) .. ": " .. tostring(GetItemName(lastGotChartmID)))
+
+            StatsUI:NewRow("radioMsgEvent: " .. tostring(radioMsgEvent))
+            StatsUI:NewRow("currentMovieID: " .. tostring(currentMovieID))
+            StatsUI:NewRow("currentMovieCallback: " .. tostring(currentMovieCallback))
         end
 
         local clock = GetGameClock()
@@ -1365,8 +1462,6 @@ end,
         --     StatsUI:NewRow("NowGameRank: " .. tostring(attackPermit:get_field("NowGameRank")))
         -- end
 
-        local masterPlayer = nil
-
         local character = GetCharacterManager()
         if character ~= nil then
             local players = character:call("get_PlayerAndPartnerContextList") -- List<chainsaw.CharacterContext>
@@ -1375,7 +1470,7 @@ end,
             for i = 0, playerLen - 1, 1 do
                 local playerCtx = players:call("get_Item", i)
 
-                if Config.StatsUI.Enabled then
+                if Config.StatsUI.Enabled and playerCtx ~= nil then
                     local hp = playerCtx:call("get_HitPoint")
                     DrawHP(StatsUI, "Player " .. tostring(i) .. " HP: ", hp, Config.StatsUI.DrawPlayerHPBar, Config.StatsUI.Width, 0, "Player HP Value")
                     if Config.DebugMode then
@@ -1389,13 +1484,16 @@ end,
                 --     tostring(hp:call("get_CurrentHitPoint")) .. "/" ..
                 --     tostring(hp:call("get_DefaultHitPoint"))
                 -- )
-                if i == 0 then
-                    masterPlayer = playerCtx
-                    SetInvincible(playerCtx)
-                end
             end
         end
 
+        local masterPlayer = getMasterPlayer()
+        if masterPlayer ~= nil then
+            if Config.TesterMode then
+                DrawHP(StatsUI, "MasterPlayer HP: ", masterPlayer:call("get_HitPoint"), Config.StatsUI.DrawPlayerHPBar, Config.StatsUI.Width, 0, "Player HP Value")
+            end
+            SetInvincible(masterPlayer)
+        end
         if Config.StatsUI.Enabled and masterPlayer ~= nil then
             StatsUI:NewRow("HateRate: " .. FloatColumn(masterPlayer:call("get_HateRate")), "Player Hate Rate")
         end
@@ -1409,15 +1507,24 @@ end,
         end
 
         if Config.TesterMode then
-            if lastHoverItemID ~= nil then
+            -- if lastHoverKeyItemID ~= nil then
+                StatsUI:NewRow("lastHoverKeyItemID: " .. GetItemName(lastHoverKeyItemID) .. "/" .. tostring(lastHoverKeyItemID))
+                StatsUI:NewRow("lastHoverKeyItemGuid: " .. tostring(lastHoverKeyItemGuid))
+                StatsUI:NewRow("lastHoverKeyItem: " .. tostring(lastHoverKeyItem))
+                if lastHoverKeyItem ~= nil then
+                    local item = lastHoverKeyItem:get_field("<Item>k__BackingField")
+                    DisplayItem(StatsUI, item)
+                end
+            -- end
+            -- if lastHoverItemID ~= nil then
                 StatsUI:NewRow("lastHoverItemID: " .. GetItemName(lastHoverItemID) .. "/" .. tostring(lastHoverItemID))
-            end
-            if lastUseItemID ~= nil then
+            -- end
+            -- if lastUseItemID ~= nil then
                 StatsUI:NewRow("LastUseItemID: " .. GetItemName(lastUseItemID) .. "/" .. tostring(lastUseItemID))
-            end
-            if lastShootAmmoItemID ~= nil then
+            -- end
+            -- if lastShootAmmoItemID ~= nil then
                 StatsUI:NewRow("LastShootAmmoItemID: " .. GetItemName(lastShootAmmoItemID) .. "/" .. tostring(lastShootAmmoItemID))
-            end
+            -- end
 
             local drop = GetDropItemManager()
             if drop ~= nil then
@@ -1523,6 +1630,9 @@ end,
             EnemyUI:NewRow("-- Enemy UI --", "Enemy UI Title")
         end
 
+        if Config.TesterMode then
+            DisplayItem(EnemyUI, lastAddItem)
+        end
         -- if Config.SearchDelLago then
             -- local sceneMgr = GetSceneManager()
             -- if sceneMgr ~= nil then
@@ -1606,10 +1716,10 @@ end,
 
                 for i = 0, enemyLen - 1, 1 do
                     local enemyCtx = enemies:call("get_Item", i)
-
-                    DisplayEnemyContext(EnemyUI, "Enemy: " .. tostring(i), enemyCtx, masterPlayer)
+                    if enemyCtx ~= nil then
+                        DisplayEnemyContext(EnemyUI, "Enemy: " .. tostring(i), enemyCtx, masterPlayer)
+                    end
                 end
-
             end
             -- chainsaw.EnemyBaseContext: GameRankAdd
             -- chainsaw.CharacterContext: KindID, SpawnerID (type is ContextID?), IsRespawn, BreakPartsHitPointList, _HitPointVital
@@ -1620,6 +1730,9 @@ end,
 	end
 )
 
+local toAddKeyItemID = ""
+local lastAddItemValid = nil
+local lastAddItemResult = nil
 local delLagoNoClipPos = Vector3f.new(0.0, 0.0, 0.0)
 local playerNoClipPos = Vector3f.new(0.0, 0.0, 0.0)
 -- === Menu ===
@@ -1895,6 +2008,75 @@ re.on_draw_ui(function()
                 -- _, disableWaterObstacle = imgui.checkbox("disableWaterObstacle", disableWaterObstacle)
 
                 imgui.tree_pop()
+            end
+        end
+
+        if Config.TesterMode then
+            local player = getMasterPlayer()
+            -- if player ~= nil and lastHoverKeyItem ~= nil then
+            if player ~= nil then
+                local headUpdater = player:call("get_HeadUpdater()")
+                if headUpdater ~= nil then
+                    local inventoryCtl =  headUpdater:call("get_KeyItemInventoryController()")
+                    if inventoryCtl ~= nil then
+                        local inventory = inventoryCtl:call("get__Inventory()")
+                        if inventory ~= nil then
+                            _, toAddKeyItemID = imgui.input_text("New Key Item ID", toAddKeyItemID);
+                            if toAddKeyItemID ~= nil and toAddKeyItemID ~= "" then
+                                if imgui.button("Add key item: " .. tostring(toAddKeyItemID)) then
+                                    local item = sdk.create_instance("chainsaw.Item", false):add_ref()
+                                    local itemDef = sdk.create_instance("chainsaw.ItemDefiniition", false):add_ref()
+                                    itemDef:set_field("_ItemSize", 0)
+                                    itemDef:set_field("_StackMax", 1)
+                                    itemDef:set_field("_DefaultDurabilityMax", 1000)
+                                    local useResults = sdk.create_managed_array(sdk.find_type_definition("chainsaw.ItemUseResult"), 0)
+                                    local equipReq = sdk.create_instance("chainsaw.EquipRequirement", false):add_ref()
+                                    local addReq = sdk.create_instance("chainsaw.AdditionalRequirement", false):add_ref()
+                                    equipReq:set_field("_EquipableTarget", 4294967295)
+                                    addReq:set_field("_DedicatedTarget", 4294967295)
+                                    itemDef:set_field("_UseResults", useResults)
+                                    itemDef:set_field("_EquipRequirement", equipReq)
+                                    itemDef:set_field("_AdditionalRequirement", addReq)
+
+                                    item:call("set__ItemDefine", itemDef)
+                                    item:set_field("_ItemId", toAddKeyItemID)
+                                    item:set_field("_CurrentItemCount", 1)
+
+                                    local guid = sdk.create_instance("System.Guid", false)
+                                    -- guid = guid:call("Parse", "1b2f1654-171e-4cf0-98d9-1f2592669a00")
+                                    guid = guid:call("NewGuid")
+                                    item:call("setId", guid)
+
+                                    lastAddItem = item
+                                    lastAddItemValid = item:call("get_IsValid")
+                                    if lastAddItemValid then
+                                        lastAddItemResult = (inventoryCtl:call("add", item))
+                                    end
+                                end
+                            else
+                                imgui.text("item is nil")
+                            end
+                        else
+                            imgui.text("inventory is nil")
+                        end
+                    else
+                        imgui.text("inventoryController is nil")
+                    end
+                else
+                    imgui.text("headUpdater is nil")
+                end
+            else
+                imgui.text("player is nil")
+            end
+            if lastAddItemResult ~= nil then
+                -- imgui.text("LastAddResult: " .. tostring(lastAddItemResult:get_field("ID")) .. "/" .. tostring(lastAddItemResult:get_field("AddCount")))
+                imgui.text("LastAddResult: " .. tostring(lastAddItemResult:get_field("AddCount")))
+            else
+                imgui.text("LastAddResult is nil") -- 119275200
+            end
+
+            if lastAddItemValid ~= nil then
+                imgui.text("item valid: " .. tostring(lastAddItemValid))
             end
         end
 
