@@ -460,7 +460,7 @@ local function GetItemName(id)
     if Config.Language == "CN" and name.CN ~= nil and name.CN ~= "" then
         return name.CN
     end
-    if name.EN ~= nil and name.EN ~= "" then
+    if Config.Language == "EN" and name.EN ~= nil and name.EN ~= "" then
         return name.EN
     end
     return name
